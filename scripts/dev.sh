@@ -37,6 +37,14 @@ uv sync --quiet
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
 
+# Kill existing process on port if present
+PID=$(lsof -ti :"$PORT" 2>/dev/null || true)
+if [ -n "$PID" ]; then
+    echo "Port $PORT in use (PID $PID), stopping..."
+    kill "$PID" 2>/dev/null || true
+    sleep 1
+fi
+
 echo ""
 echo "=== Video Summarizer Dev Server ==="
 echo "http://${HOST}:${PORT}"
