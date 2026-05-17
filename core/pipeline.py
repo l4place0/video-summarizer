@@ -52,7 +52,7 @@ def _try_cache(db: Storage, url: str, task_id: str) -> tuple[str, dict] | None:
     return transcript, metadata
 
 
-def run_pipeline(task_id: str, url: str, language: str, llm_provider: str, detail: str, mode: str = "audio") -> None:
+def run_pipeline(task_id: str, url: str, language: str, llm_provider: str, detail: str, mode: str = "multimodal") -> None:
     """Run the full pipeline for a task. Called in background."""
     db = Storage()
     video_path: Path | None = None

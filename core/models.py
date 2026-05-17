@@ -19,9 +19,9 @@ class TaskStatus(str, Enum):
 class SummarizeRequest(BaseModel):
     url: str
     language: str = "zh"
-    llm_provider: str = "claude"
+    llm_provider: str = "openai"
     detail: str = "normal"
-    mode: str = "audio"
+    mode: str = "multimodal"
 
 
 class TaskResponse(BaseModel):

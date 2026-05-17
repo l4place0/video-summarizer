@@ -10,8 +10,9 @@ from core.models import (
 def test_summarize_request_defaults():
     req = SummarizeRequest(url="https://bilibili.com/video/BV123")
     assert req.language == "zh"
-    assert req.llm_provider == "claude"
+    assert req.llm_provider == "openai"
     assert req.detail == "normal"
+    assert req.mode == "multimodal"
 
 
 def test_task_status_values():

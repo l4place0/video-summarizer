@@ -25,7 +25,7 @@ fi
 
 URL=""
 LANG="zh"
-PROVIDER="claude"
+PROVIDER="openai"
 DETAIL="normal"
 MODE="audio"
 NO_POLL=false

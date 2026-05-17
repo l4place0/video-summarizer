@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     port: int = 8000
 
     # LLM
-    llm_provider: str = "claude"
+    llm_provider: str = "openai"
     claude_model: str = "claude-sonnet-4-20250514"
     anthropic_api_key: str = ""
     anthropic_base_url: str = ""
@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
 
     # Whisper
-    whisper_model: str = "base"
+    whisper_model: str = "medium"
 
     # Cookies (for Bilibili etc.)
     cookies_path: Path = Path("data/cookies.txt")
