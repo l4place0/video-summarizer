@@ -44,6 +44,8 @@ def _get_model():
 
 def transcribe(audio_path: Path, language: str = "zh") -> str:
     """Transcribe audio file to text using Whisper."""
+    global _device, _model
+
     logger.info("Transcribing: %s (lang=%s)", audio_path.name, language)
     model = _get_model()
     device = _get_device()
@@ -53,9 +55,10 @@ def transcribe(audio_path: Path, language: str = "zh") -> str:
         result = model.transcribe(str(audio_path), language=language, fp16=fp16)
     except (RuntimeError, ValueError) as e:
         if "nan" in str(e).lower() or "invalid values" in str(e).lower():
-            logger.warning("FP16 failed on GPU, retrying with FP32 on CPU")
-            model = model.to("cpu")
-            result = model.transcribe(str(audio_path), language=language, fp16=False)
+            logger.warning("FP16 failed on GPU, falling back to CPU for all subsequent transcriptions")
+            _device = "cpu"
+            _model = model.to("cpu")
+            result = _model.transcribe(str(audio_path), language=language, fp16=False)
         else:
             raise
 
