@@ -22,7 +22,7 @@ uv sync
 cp .env.example .env  # edit with your API keys
 
 # Start
-uv run uvicorn app.main:app --port 8000
+uv run uvicorn core.main:app --port 8000
 
 # Use
 bash .claude/skills/video-summarizer/scripts/summarize.sh "https://bilibili.com/video/BVxxxxx"

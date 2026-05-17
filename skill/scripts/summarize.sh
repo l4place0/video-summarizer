@@ -56,32 +56,32 @@ fi
 # --- Health check ---
 HEALTH=$(curl -sf --connect-timeout 3 "$BASE_URL/health" 2>/dev/null || echo "")
 if ! echo "$HEALTH" | grep -q '"ok"'; then
-    echo "Error: 视频摘要服务未运行"
+    echo "Error: Video summarizer service is not running"
     echo ""
-    echo "请先启动服务:"
-    echo "  cd $(dirname "$0")/../../.. && uvicorn app.main:app --port 8000"
+    echo "Start the service first:"
+    echo "  cd $(dirname "$0")/../../.. && uvicorn core.main:app --port 8000"
     exit 1
 fi
 
 # --- Submit task ---
-echo "提交任务..."
+echo "Submitting task..."
 RESP=$(curl -sf --connect-timeout 3 -X POST "$BASE_URL/api/summarize" \
     -H "Content-Type: application/json" \
     -d "{\"url\": \"$URL\", \"language\": \"$LANG\", \"llm_provider\": \"$PROVIDER\", \"detail\": \"$DETAIL\", \"mode\": \"$MODE\"}" 2>/dev/null || echo "")
 
 if [ -z "$RESP" ]; then
-    echo "Error: 提交失败，无法连接服务"
+    echo "Error: Submission failed, cannot connect to service"
     exit 1
 fi
 
 TASK_ID=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('task_id',''))" 2>/dev/null || echo "")
 if [ -z "$TASK_ID" ]; then
-    ERROR=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('detail','未知错误'))" 2>/dev/null || echo "未知错误")
+    ERROR=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('detail','Unknown error'))" 2>/dev/null || echo "Unknown error")
     echo "Error: $ERROR"
     exit 1
 fi
 
-echo "任务已创建: $TASK_ID"
+echo "Task created: $TASK_ID"
 
 if [ "$NO_POLL" = true ]; then
     echo "$TASK_ID"
@@ -90,7 +90,7 @@ fi
 
 # --- Poll ---
 ELAPSED=0
-STATUS_LABELS='{"pending":"等待中","downloading":"下载中","transcribing":"转录中","extracting_frames":"提取关键帧中","summarizing":"总结中","done":"完成","failed":"失败"}'
+STATUS_LABELS='{"pending":"Pending","downloading":"Downloading","transcribing":"Transcribing","classifying":"Classifying","extracting_frames":"Extracting frames","summarizing":"Summarizing","done":"Done","failed":"Failed"}'
 
 while [ $ELAPSED -lt $TIMEOUT ]; do
     TASK_RESP=$(curl -sf --connect-timeout 3 "$BASE_URL/api/tasks/$TASK_ID" 2>/dev/null || echo "{}")
@@ -99,13 +99,13 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
 
     if [ "$STATUS" = "done" ]; then
         echo ""
-        echo "=== 视频摘要完成 ==="
+        echo "=== Video Summary Complete ==="
         echo ""
         echo "$TASK_RESP" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 meta = d.get('metadata') or {}
-title = meta.get('title', '未知标题')
+title = meta.get('title', 'Unknown')
 duration = meta.get('duration', 0)
 platform = d.get('platform', 'unknown')
 summary = d.get('summary', '')
@@ -113,12 +113,12 @@ transcript = d.get('transcript', '')
 task_id = d.get('task_id', '')
 
 m, s = divmod(duration, 60)
-dur_str = f'{m}分{s}秒' if m > 0 else f'{s}秒'
+dur_str = f'{m}m {s}s' if m > 0 else f'{s}s'
 
-print(f'标题: {title}')
-print(f'时长: {dur_str} | 平台: {platform}')
+print(f'Title: {title}')
+print(f'Duration: {dur_str} | Platform: {platform}')
 print()
-print('摘要:')
+print('Summary:')
 print(summary)
 
 if transcript:
@@ -127,28 +127,28 @@ if transcript:
         preview += '...'
     print()
     print('---')
-    print(f'转录原文 (前 500 字):')
+    print('Transcript (first 500 chars):')
     print(preview)
 
 print()
-print(f'---')
-print(f'任务ID: {task_id} | 完整详情: /api/tasks/{task_id}')
+print('---')
+print(f'Task ID: {task_id} | Full details: /api/tasks/{task_id}')
 "
         exit 0
 
     elif [ "$STATUS" = "failed" ]; then
-        ERROR=$(echo "$TASK_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error','未知错误'))" 2>/dev/null || echo "未知错误")
+        ERROR=$(echo "$TASK_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error','Unknown error'))" 2>/dev/null || echo "Unknown error")
         echo ""
-        echo "Error: 任务失败 — $ERROR"
+        echo "Error: Task failed — $ERROR"
         exit 1
     fi
 
-    printf "\r状态: %s (%ds)" "$LABEL" "$ELAPSED"
+    printf "\rStatus: %s (%ds)" "$LABEL" "$ELAPSED"
     sleep $POLL_INTERVAL
     ELAPSED=$((ELAPSED + POLL_INTERVAL))
 done
 
 echo ""
-echo "Error: 超时 (${TIMEOUT}s)，任务可能仍在运行"
-echo "手动查询: curl $BASE_URL/api/tasks/$TASK_ID"
+echo "Error: Timeout (${TIMEOUT}s), task may still be running"
+echo "Check manually: curl $BASE_URL/api/tasks/$TASK_ID"
 exit 1

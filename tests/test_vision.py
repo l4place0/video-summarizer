@@ -10,7 +10,7 @@ import pytest
 
 def test_base_llm_multimodal_fallback():
     """BaseLLM.summarize_multimodal falls back to text-only."""
-    from app.llm.base import BaseLLM
+    from core.llm.base import BaseLLM
 
     class DummyLLM(BaseLLM):
         def _chat(self, prompt, max_tokens=4096):
@@ -26,7 +26,7 @@ def test_base_llm_multimodal_fallback():
 
 def test_base_llm_classify():
     """BaseLLM.classify parses JSON response."""
-    from app.llm.base import BaseLLM
+    from core.llm.base import BaseLLM
 
     class DummyLLM(BaseLLM):
         def _chat(self, prompt, max_tokens=4096):
@@ -40,7 +40,7 @@ def test_base_llm_classify():
 
 def test_base_llm_classify_invalid_json():
     """BaseLLM.classify falls back to general on bad JSON."""
-    from app.llm.base import BaseLLM
+    from core.llm.base import BaseLLM
 
     class DummyLLM(BaseLLM):
         def _chat(self, prompt, max_tokens=4096):
@@ -53,7 +53,7 @@ def test_base_llm_classify_invalid_json():
 
 def test_base_llm_classify_markdown_json():
     """BaseLLM.classify handles markdown-wrapped JSON."""
-    from app.llm.base import BaseLLM
+    from core.llm.base import BaseLLM
 
     class DummyLLM(BaseLLM):
         def _chat(self, prompt, max_tokens=4096):
@@ -66,13 +66,13 @@ def test_base_llm_classify_markdown_json():
 
 def test_claude_multimodal_extracts_frames():
     """Claude multimodal extracts frames internally and sends as images."""
-    from app.llm.claude import ClaudeLLM
+    from core.llm.claude import ClaudeLLM
 
     with tempfile.TemporaryDirectory() as tmp:
         video = Path(tmp) / "test.mp4"
         video.write_bytes(b"fake video")
 
-        with patch("app.llm.claude.settings") as mock_settings:
+        with patch("core.llm.claude.settings") as mock_settings:
             mock_settings.anthropic_api_key = "test-key"
             mock_settings.anthropic_base_url = ""
             mock_settings.claude_model = "test-model"
@@ -82,7 +82,7 @@ def test_claude_multimodal_extracts_frames():
             llm = ClaudeLLM()
 
             with patch.object(llm, "_chat_multimodal", return_value="multimodal summary") as mock_chat, \
-                 patch("app.llm.claude._extract_frames") as mock_extract:
+                 patch("core.llm.claude._extract_frames") as mock_extract:
                 frame = Path(tmp) / "frame.jpg"
                 frame.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 100)
                 mock_extract.return_value = [frame]
@@ -100,13 +100,13 @@ def test_claude_multimodal_extracts_frames():
 
 def test_openai_multimodal_frame_first():
     """OpenAI multimodal tries frame extraction first."""
-    from app.llm.openai_proto import OpenAILLM
+    from core.llm.openai_proto import OpenAILLM
 
     with tempfile.TemporaryDirectory() as tmp:
         video = Path(tmp) / "test.mp4"
         video.write_bytes(b"fake video")
 
-        with patch("app.llm.openai_proto.settings") as mock_settings:
+        with patch("core.llm.openai_proto.settings") as mock_settings:
             mock_settings.openai_api_key = "test-key"
             mock_settings.openai_base_url = "http://test"
             mock_settings.openai_model = "test-model"
@@ -117,7 +117,7 @@ def test_openai_multimodal_frame_first():
             llm = OpenAILLM()
 
             with patch.object(llm, "_chat_multimodal", return_value="frame summary") as mock_chat, \
-                 patch("app.llm.openai_proto._extract_frames") as mock_extract:
+                 patch("core.llm.openai_proto._extract_frames") as mock_extract:
                 frame = Path(tmp) / "frame.jpg"
                 frame.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 100)
                 mock_extract.return_value = [frame]
@@ -133,13 +133,13 @@ def test_openai_multimodal_frame_first():
 
 def test_openai_multimodal_fallback_to_native_video():
     """OpenAI falls back to native video when frame extraction fails."""
-    from app.llm.openai_proto import OpenAILLM
+    from core.llm.openai_proto import OpenAILLM
 
     with tempfile.TemporaryDirectory() as tmp:
         video = Path(tmp) / "test.mp4"
         video.write_bytes(b"fake video data")
 
-        with patch("app.llm.openai_proto.settings") as mock_settings:
+        with patch("core.llm.openai_proto.settings") as mock_settings:
             mock_settings.openai_api_key = "test-key"
             mock_settings.openai_base_url = "http://test"
             mock_settings.openai_model = "test-model"
@@ -150,7 +150,7 @@ def test_openai_multimodal_fallback_to_native_video():
             llm = OpenAILLM()
 
             with patch.object(llm, "_chat_multimodal", return_value="native video summary") as mock_chat, \
-                 patch("app.llm.openai_proto._extract_frames", return_value=[]):
+                 patch("core.llm.openai_proto._extract_frames", return_value=[]):
 
                 result = llm.summarize_multimodal("transcript text", video, lang="zh", content_type="general")
 
@@ -162,13 +162,13 @@ def test_openai_multimodal_fallback_to_native_video():
 
 def test_openai_multimodal_fallback_to_text():
     """OpenAI falls back to text-only when both frame and native video fail."""
-    from app.llm.openai_proto import OpenAILLM
+    from core.llm.openai_proto import OpenAILLM
 
     with tempfile.TemporaryDirectory() as tmp:
         video = Path(tmp) / "test.mp4"
         video.write_bytes(b"fake video data")
 
-        with patch("app.llm.openai_proto.settings") as mock_settings:
+        with patch("core.llm.openai_proto.settings") as mock_settings:
             mock_settings.openai_api_key = "test-key"
             mock_settings.openai_base_url = "http://test"
             mock_settings.openai_model = "test-model"
@@ -189,7 +189,7 @@ def test_openai_multimodal_fallback_to_text():
 
             with patch.object(llm, "_chat", side_effect=side_effect), \
                  patch.object(llm, "_chat_multimodal", side_effect=side_effect), \
-                 patch("app.llm.openai_proto._extract_frames") as mock_extract:
+                 patch("core.llm.openai_proto._extract_frames") as mock_extract:
                 frame = Path(tmp) / "frame.jpg"
                 frame.write_bytes(b"fake")
                 mock_extract.return_value = [frame]
@@ -201,7 +201,7 @@ def test_openai_multimodal_fallback_to_text():
 
 def test_content_type_routing():
     """content_type is passed through to prompt selection."""
-    from app.llm.prompts import get_summary_prompt
+    from core.llm.prompts import get_summary_prompt
 
     tutorial_prompt = get_summary_prompt("tutorial", "zh")
     general_prompt = get_summary_prompt("general", "zh")
@@ -214,7 +214,7 @@ def test_content_type_routing():
 
 def test_content_types_coverage():
     """All content types have prompts."""
-    from app.llm.prompts import CONTENT_TYPES, get_summary_prompt
+    from core.llm.prompts import CONTENT_TYPES, get_summary_prompt
 
     for ct in CONTENT_TYPES:
         prompt = get_summary_prompt(ct, "zh")

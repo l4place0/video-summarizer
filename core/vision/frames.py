@@ -2,7 +2,7 @@ import logging
 import subprocess
 from pathlib import Path
 
-from app.platforms.base import BasePlatform
+from core.platforms.base import BasePlatform
 
 logger = logging.getLogger(__name__)
 

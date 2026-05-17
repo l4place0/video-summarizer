@@ -3,7 +3,7 @@ import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from app.llm.prompts import (
+from core.llm.prompts import (
     CLASSIFY_PROMPT,
     CLASSIFY_PROMPT_MULTIMODAL,
     CONTENT_TYPES,

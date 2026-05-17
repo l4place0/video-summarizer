@@ -28,19 +28,19 @@ fi
 # --- Task detail mode ---
 if [ "$MODE" = "task" ]; then
     if [ "$SERVICE_UP" != true ]; then
-        echo "Error: 服务未运行"
+        echo "Error: Service is not running"
         exit 1
     fi
     RESP=$(curl -sf --connect-timeout 3 "$BASE_URL/api/tasks/$TASK_ID" 2>/dev/null || echo "")
     if [ -z "$RESP" ] || echo "$RESP" | grep -q '"detail"'; then
-        echo "Error: 任务不存在 ($TASK_ID)"
+        echo "Error: Task not found ($TASK_ID)"
         exit 1
     fi
     echo "$RESP" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 meta = d.get('metadata') or {}
-title = meta.get('title', '未知标题')
+title = meta.get('title', 'Unknown')
 duration = meta.get('duration', 0)
 platform = d.get('platform', 'unknown')
 status = d.get('status', 'unknown')
@@ -51,29 +51,29 @@ created = d.get('created_at', '')
 completed = d.get('completed_at', '')
 
 m, s = divmod(duration, 60)
-dur_str = f'{m}分{s}秒' if m > 0 else f'{s}秒'
+dur_str = f'{m}m {s}s' if m > 0 else f'{s}s'
 
-print(f'任务ID: {d.get(\"task_id\", \"\")}')
-print(f'状态:   {status}')
-print(f'标题:   {title}')
-print(f'时长:   {dur_str} | 平台: {platform}')
-print(f'创建:   {created}')
+print(f'Task ID: {d.get(\"task_id\", \"\")}')
+print(f'Status:  {status}')
+print(f'Title:   {title}')
+print(f'Duration: {dur_str} | Platform: {platform}')
+print(f'Created: {created}')
 if completed:
-    print(f'完成:   {completed}')
+    print(f'Completed: {completed}')
 print()
 
 if summary:
-    print('摘要:')
+    print('Summary:')
     print(summary)
     print()
 
 if transcript:
-    print('转录:')
+    print('Transcript:')
     print(transcript)
     print()
 
 if error:
-    print(f'错误: {error}')
+    print(f'Error: {error}')
 "
     exit 0
 fi
@@ -81,27 +81,27 @@ fi
 # --- Cleanup mode ---
 if [ "$MODE" = "cleanup" ]; then
     if [ "$SERVICE_UP" != true ]; then
-        echo "Error: 服务未运行"
+        echo "Error: Service is not running"
         exit 1
     fi
-    echo "清理所有存储数据..."
+    echo "Cleaning up all storage data..."
     RESP=$(curl -sf --connect-timeout 3 -X DELETE "$BASE_URL/api/storage" 2>/dev/null || echo "")
     if [ -z "$RESP" ]; then
-        echo "Error: 清理失败"
+        echo "Error: Cleanup failed"
         exit 1
     fi
     echo "$RESP" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-print(f'已删除 {d.get(\"deleted_tasks\", 0)} 个任务')
-print(f'已删除 {d.get(\"deleted_files\", 0)} 个文件')
+print(f'Deleted {d.get(\"deleted_tasks\", 0)} tasks')
+print(f'Deleted {d.get(\"deleted_files\", 0)} files')
 freed = d.get('freed_bytes', 0)
 if freed > 1024*1024:
-    print(f'释放空间: {freed/1024/1024:.1f} MB')
+    print(f'Freed: {freed/1024/1024:.1f} MB')
 elif freed > 1024:
-    print(f'释放空间: {freed/1024:.1f} KB')
+    print(f'Freed: {freed/1024:.1f} KB')
 else:
-    print(f'释放空间: {freed} B')
+    print(f'Freed: {freed} B')
 "
     exit 0
 fi
@@ -110,12 +110,12 @@ fi
 echo "=== Video Summarizer Status ==="
 
 if [ "$SERVICE_UP" = true ]; then
-    echo "服务: 运行中 (v$VERSION)"
+    echo "Service: Running (v$VERSION)"
 else
-    echo "服务: 未运行"
+    echo "Service: Not running"
     echo ""
-    echo "启动命令:"
-    echo "  cd $(dirname "$0")/../../.. && uvicorn app.main:app --port 8000"
+    echo "Start command:"
+    echo "  cd $(dirname "$0")/../../.. && uvicorn core.main:app --port 8000"
     exit 1
 fi
 
@@ -133,7 +133,7 @@ elif total > 1024:
     size_str = f'{total/1024:.1f} KB'
 else:
     size_str = f'{total} B'
-print(f'存储: {count} 个任务 | {size_str}')
+print(f'Storage: {count} tasks | {size_str}')
 "
 fi
 
@@ -141,7 +141,7 @@ fi
 TASKS=$(curl -sf --connect-timeout 3 "$BASE_URL/api/tasks" 2>/dev/null || echo "")
 if [ -n "$TASKS" ]; then
     echo ""
-    echo "最近任务:"
+    echo "Recent tasks:"
     echo "$TASKS" | python3 -c "
 import sys, json
 from datetime import datetime

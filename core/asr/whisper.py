@@ -4,7 +4,7 @@ from pathlib import Path
 import torch
 import whisper
 
-from app.core.config import settings
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 

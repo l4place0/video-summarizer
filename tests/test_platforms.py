@@ -1,4 +1,4 @@
-from app.platforms.bilibili import BilibiliPlatform
+from core.platforms.bilibili import BilibiliPlatform
 
 
 def test_bilibili_match():

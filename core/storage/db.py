@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.core.config import settings
+from core.config import settings
 
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS tasks (

@@ -6,9 +6,9 @@ from pathlib import Path
 
 from openai import OpenAI
 
-from app.core.config import settings
-from app.llm.base import BaseLLM
-from app.llm.prompts import get_summary_prompt
+from core.config import settings
+from core.llm.base import BaseLLM
+from core.llm.prompts import get_summary_prompt
 
 logger = logging.getLogger(__name__)
 

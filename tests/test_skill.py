@@ -10,20 +10,20 @@ from unittest.mock import patch, MagicMock
 import pytest
 import uvicorn
 
-SCRIPTS_DIR = Path(__file__).parent.parent / ".claude" / "skills" / "video-summarizer" / "scripts"
+SCRIPTS_DIR = Path(__file__).parent.parent / "skill" / "scripts"
 SUMMARIZE = str(SCRIPTS_DIR / "summarize.sh")
 STATUS = str(SCRIPTS_DIR / "status.sh")
 
 SETTINGS_TARGETS = [
-    "app.core.pipeline.settings",
-    "app.storage.db.settings",
-    "app.llm.claude.settings",
-    "app.llm.openai_proto.settings",
+    "core.pipeline.settings",
+    "core.storage.db.settings",
+    "core.llm.claude.settings",
+    "core.llm.openai_proto.settings",
 ]
 
-MOCK_DOWNLOAD = "app.platforms.bilibili.BilibiliPlatform.download"
-MOCK_TRANSCRIBE = "app.core.pipeline.transcribe"
-MOCK_GET_LLM = "app.core.pipeline.get_llm"
+MOCK_DOWNLOAD = "core.platforms.bilibili.BilibiliPlatform.download"
+MOCK_TRANSCRIBE = "core.pipeline.transcribe"
+MOCK_GET_LLM = "core.pipeline.get_llm"
 
 
 def _make_settings(tmp_dir):
@@ -48,7 +48,7 @@ def _make_settings(tmp_dir):
 
 def _mock_download(url, output_dir, keep_video=False):
     output_dir.mkdir(parents=True, exist_ok=True)
-    from app.platforms.bilibili import BilibiliPlatform
+    from core.platforms.bilibili import BilibiliPlatform
     video_id = BilibiliPlatform().parse_url(url)
     audio_path = output_dir / f"{video_id}.wav"
     audio_path.write_bytes(b"fake audio data")
@@ -90,11 +90,11 @@ def server(tmp_path):
     for p in patches:
         p.start()
 
-    import app.api.routes as routes
-    from app.storage.db import Storage
+    import core.api.routes as routes
+    from core.storage.db import Storage
     routes.db = Storage(db_path=tmp_path / "test.db")
 
-    app = __import__("app.main", fromlist=["app"]).app
+    app = __import__("core.main", fromlist=["app"]).app
 
     port = _free_port()
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error")
@@ -126,7 +126,7 @@ def test_summarize_no_service():
         timeout=15,
     )
     assert r.returncode == 1
-    assert "未运行" in r.stdout
+    assert "not running" in r.stdout
 
 
 def test_summarize_no_args():
@@ -154,7 +154,7 @@ def test_summarize_no_poll(server, tmp_path):
             timeout=10,
         )
         assert r.returncode == 0
-        assert "任务已创建" in r.stdout
+        assert "Task created" in r.stdout
         lines = r.stdout.strip().split("\n")
         task_id = lines[-1]
         assert len(task_id) == 36
@@ -171,10 +171,10 @@ def test_summarize_full_flow(server):
             timeout=60,
         )
         assert r.returncode == 0
-        assert "视频摘要完成" in r.stdout
+        assert "Video Summary Complete" in r.stdout
         assert "Test Video Title" in r.stdout
         assert "这是一个测试视频摘要" in r.stdout
-        assert "转录原文" in r.stdout
+        assert "Transcript" in r.stdout
 
 
 def test_summarize_with_options(server):
@@ -188,7 +188,7 @@ def test_summarize_with_options(server):
             timeout=10,
         )
         assert r.returncode == 0
-        assert "任务已创建" in r.stdout
+        assert "Task created" in r.stdout
 
 
 # === status.sh tests ===
@@ -200,14 +200,14 @@ def test_status_no_service():
         timeout=15,
     )
     assert r.returncode == 1
-    assert "未运行" in r.stdout
+    assert "Not running" in r.stdout
 
 
 def test_status_running(server):
     r = _run(f"bash {STATUS}", env_vars={"VIDEO_SUMMARIZER_URL": server}, timeout=10)
     assert r.returncode == 0
-    assert "运行中" in r.stdout
-    assert "存储" in r.stdout
+    assert "Running" in r.stdout
+    assert "Storage" in r.stdout
 
 
 def test_status_with_tasks(server):
@@ -224,7 +224,7 @@ def test_status_with_tasks(server):
 
         r = _run(f"bash {STATUS}", env_vars={"VIDEO_SUMMARIZER_URL": server}, timeout=10)
         assert r.returncode == 0
-        assert "最近任务" in r.stdout
+        assert "Recent tasks" in r.stdout
 
 
 def test_status_task_detail(server):
@@ -246,13 +246,13 @@ def test_status_task_detail(server):
             timeout=10,
         )
         assert r.returncode == 0
-        assert "Test Video Title" in r.stdout or "任务ID" in r.stdout
+        assert "Test Video Title" in r.stdout or "Task ID" in r.stdout
 
 
 def test_status_cleanup(server):
     r = _run(f"bash {STATUS} --cleanup", env_vars={"VIDEO_SUMMARIZER_URL": server}, timeout=10)
     assert r.returncode == 0
-    assert "已删除" in r.stdout
+    assert "Deleted" in r.stdout
 
 
 def test_status_task_not_found(server):
@@ -262,4 +262,4 @@ def test_status_task_not_found(server):
         timeout=10,
     )
     assert r.returncode == 1
-    assert "不存在" in r.stdout
+    assert "not found" in r.stdout

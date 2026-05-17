@@ -5,8 +5,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import router
-from app.core.config import settings
+from core.api.routes import router
+from core.config import settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,4 +32,4 @@ app.mount("/", StaticFiles(directory=str(web_dir), html=True), name="web")
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app.main:app", host=settings.host, port=settings.port, reload=True)
+    uvicorn.run("core.main:app", host=settings.host, port=settings.port, reload=True)

@@ -1,4 +1,4 @@
-from app.core.models import (
+from core.models import (
     SummarizeRequest,
     TaskResponse,
     TaskStatus,

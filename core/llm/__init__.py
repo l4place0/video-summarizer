@@ -1,6 +1,6 @@
-from app.llm.base import BaseLLM
-from app.llm.claude import ClaudeLLM
-from app.llm.openai_proto import OpenAILLM
+from core.llm.base import BaseLLM
+from core.llm.claude import ClaudeLLM
+from core.llm.openai_proto import OpenAILLM
 
 _PROVIDERS = {
     "claude": ClaudeLLM,
@@ -9,7 +9,7 @@ _PROVIDERS = {
 
 
 def get_llm(provider: str | None = None) -> BaseLLM:
-    from app.core.config import settings
+    from core.config import settings
 
     provider = provider or settings.llm_provider
     cls = _PROVIDERS.get(provider)

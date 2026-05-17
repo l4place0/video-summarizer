@@ -1,7 +1,7 @@
 import tempfile
 from pathlib import Path
 
-from app.storage.db import Storage
+from core.storage.db import Storage
 
 
 def test_create_and_get_task():

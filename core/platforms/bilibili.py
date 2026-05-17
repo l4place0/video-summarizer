@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yt_dlp
 
-from app.platforms.base import BasePlatform
+from core.platforms.base import BasePlatform
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class BilibiliPlatform(BasePlatform):
         video_path = output_dir / f"{video_id}.mp4"
         audio_path = output_dir / f"{video_id}.wav"
 
-        from app.core.config import settings
+        from core.config import settings
 
         ydl_opts = {
             "outtmpl": str(video_path),

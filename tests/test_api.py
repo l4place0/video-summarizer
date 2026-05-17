@@ -4,13 +4,13 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app.storage.db import Storage
+from core.storage.db import Storage
 
 
 def _make_client(tmp_dir: str):
     """Create a test client with isolated storage."""
-    with patch("app.api.routes.db") as mock_db, \
-         patch("app.core.config.settings") as mock_settings:
+    with patch("core.api.routes.db") as mock_db, \
+         patch("core.config.settings") as mock_settings:
         mock_settings.db_path = Path(tmp_dir) / "test.db"
         mock_settings.data_dir = Path(tmp_dir)
         mock_settings.cache_dir = Path(tmp_dir) / "cache"
@@ -26,7 +26,7 @@ def _make_client(tmp_dir: str):
         mock_db.db_size = real_db.db_size
         mock_db.update_task = real_db.update_task
 
-        from app.main import app
+        from core.main import app
         yield TestClient(app), real_db
 
 

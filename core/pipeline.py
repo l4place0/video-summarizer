@@ -3,12 +3,12 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.asr.whisper import transcribe
-from app.core.config import settings
-from app.llm import get_llm
-from app.platforms.base import BasePlatform
-from app.platforms.bilibili import BilibiliPlatform
-from app.storage.db import Storage
+from core.asr.whisper import transcribe
+from core.config import settings
+from core.llm import get_llm
+from core.platforms.base import BasePlatform
+from core.platforms.bilibili import BilibiliPlatform
+from core.storage.db import Storage
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,5 @@
 """Tests for LLM prompt system."""
-from app.llm.prompts import SUMMARY_PROMPTS, CONTENT_TYPES, get_summary_prompt, get_classify_prompt
+from core.llm.prompts import SUMMARY_PROMPTS, CONTENT_TYPES, get_summary_prompt, get_classify_prompt
 
 
 def test_content_types():

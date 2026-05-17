@@ -2,7 +2,7 @@ import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.core.config import settings
+from core.config import settings
 
 
 def cache_size() -> int:

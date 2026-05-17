@@ -7,15 +7,15 @@ from unittest.mock import patch, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-MOCK_DOWNLOAD = "app.platforms.bilibili.BilibiliPlatform.download"
-MOCK_TRANSCRIBE = "app.core.pipeline.transcribe"
-MOCK_GET_LLM = "app.core.pipeline.get_llm"
+MOCK_DOWNLOAD = "core.platforms.bilibili.BilibiliPlatform.download"
+MOCK_TRANSCRIBE = "core.pipeline.transcribe"
+MOCK_GET_LLM = "core.pipeline.get_llm"
 
 SETTINGS_TARGETS = [
-    "app.core.pipeline.settings",
-    "app.storage.db.settings",
-    "app.llm.claude.settings",
-    "app.llm.openai_proto.settings",
+    "core.pipeline.settings",
+    "core.storage.db.settings",
+    "core.llm.claude.settings",
+    "core.llm.openai_proto.settings",
 ]
 
 
@@ -41,7 +41,7 @@ def _make_settings(tmp_dir):
 
 def _mock_download(url, output_dir, keep_video=False):
     output_dir.mkdir(parents=True, exist_ok=True)
-    from app.platforms.bilibili import BilibiliPlatform
+    from core.platforms.bilibili import BilibiliPlatform
     video_id = BilibiliPlatform().parse_url(url)
     audio_path = output_dir / f"{video_id}.wav"
     audio_path.write_bytes(b"fake audio data")
@@ -71,11 +71,11 @@ def client(tmp_path):
     for p in patches:
         p.start()
 
-    import app.api.routes as routes
-    from app.storage.db import Storage
+    import core.api.routes as routes
+    from core.storage.db import Storage
     routes.db = Storage(db_path=tmp_path / "test.db")
 
-    app = __import__("app.main", fromlist=["app"]).app
+    app = __import__("core.main", fromlist=["app"]).app
     yield TestClient(app)
 
     for p in patches:

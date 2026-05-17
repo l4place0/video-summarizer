@@ -3,7 +3,7 @@ import threading
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.core.models import (
+from core.models import (
     HealthResponse,
     StorageCleanupResult,
     StorageInfo,
@@ -14,9 +14,9 @@ from app.core.models import (
     TaskResponse,
     TaskStatus,
 )
-from app.core.pipeline import get_platform, run_pipeline
-from app.storage.db import Storage
-from app.storage.files import cache_size, clean_all, clean_cache
+from core.pipeline import get_platform, run_pipeline
+from core.storage.db import Storage
+from core.storage.files import cache_size, clean_all, clean_cache
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

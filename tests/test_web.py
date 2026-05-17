@@ -8,10 +8,10 @@ from fastapi.testclient import TestClient
 
 
 SETTINGS_TARGETS = [
-    "app.core.pipeline.settings",
-    "app.storage.db.settings",
-    "app.llm.claude.settings",
-    "app.llm.openai_proto.settings",
+    "core.pipeline.settings",
+    "core.storage.db.settings",
+    "core.llm.claude.settings",
+    "core.llm.openai_proto.settings",
 ]
 
 
@@ -42,11 +42,11 @@ def client(tmp_path):
     for p in patches:
         p.start()
 
-    import app.api.routes as routes
-    from app.storage.db import Storage
+    import core.api.routes as routes
+    from core.storage.db import Storage
     routes.db = Storage(db_path=tmp_path / "test.db")
 
-    app = __import__("app.main", fromlist=["app"]).app
+    app = __import__("core.main", fromlist=["app"]).app
     yield TestClient(app)
 
     for p in patches:

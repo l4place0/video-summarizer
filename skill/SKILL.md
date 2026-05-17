@@ -19,13 +19,13 @@ When the user provides a video URL or asks to summarize a video:
 2. Run the summarize script:
 
 ```bash
-bash .claude/skills/video-summarizer/scripts/summarize.sh "<URL>"
+bash skill/scripts/summarize.sh "<URL>"
 ```
 
 ### Options
 
 ```bash
-bash .claude/skills/video-summarizer/scripts/summarize.sh "<URL>" \
+bash skill/scripts/summarize.sh "<URL>" \
   --lang zh          # Language: zh (default), en, ja
   --provider claude  # LLM: claude (default), openai
   --detail normal    # Detail: brief, normal (default), detailed
@@ -37,7 +37,7 @@ bash .claude/skills/video-summarizer/scripts/summarize.sh "<URL>" \
 When the user asks for a more visual/complete summary, use `--mode multimodal`:
 
 ```bash
-bash .claude/skills/video-summarizer/scripts/summarize.sh "<URL>" --mode multimodal
+bash skill/scripts/summarize.sh "<URL>" --mode multimodal
 ```
 
 This extracts key frames from the video and sends them along with the audio transcript to the LLM for a richer summary that includes visual content analysis.
@@ -50,9 +50,9 @@ The script outputs a structured summary. Present it to the user as-is — it is 
 
 If the script reports the service is not running, tell the user:
 
-> 视频摘要服务未运行。请先启动：
+> Video summarizer service is not running. Start it first:
 > ```bash
-> cd /home/l4p/project-v && uvicorn app.main:app --port 8000
+> cd /home/l4p/project-v && uvicorn core.main:app --port 8000
 > ```
 
 ## Other Commands
@@ -60,17 +60,17 @@ If the script reports the service is not running, tell the user:
 ### Check status
 
 ```bash
-bash .claude/skills/video-summarizer/scripts/status.sh
+bash skill/scripts/status.sh
 ```
 
 ### Query specific task
 
 ```bash
-bash .claude/skills/video-summarizer/scripts/status.sh --task <task_id>
+bash skill/scripts/status.sh --task <task_id>
 ```
 
 ### Cleanup storage
 
 ```bash
-bash .claude/skills/video-summarizer/scripts/status.sh --cleanup
+bash skill/scripts/status.sh --cleanup
 ```
