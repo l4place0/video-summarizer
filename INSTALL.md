@@ -41,6 +41,11 @@ cp .env.example .env
 
 ```bash
 cd /home/l4p/project-v
+
+# Development (with hot-reload)
+bash scripts/dev.sh
+
+# Or manually
 uv run uvicorn core.main:app --host 0.0.0.0 --port 8000
 ```
 
