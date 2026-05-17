@@ -15,10 +15,11 @@ class BasePlatform(ABC):
         ...
 
     @abstractmethod
-    def download(self, url: str, output_dir: Path) -> tuple[Path, dict]:
-        """Download video, extract audio. Return (audio_path, metadata).
+    def download(self, url: str, output_dir: Path, keep_video: bool = False) -> tuple[Path, dict, Path | None]:
+        """Download video, extract audio. Return (audio_path, metadata, video_path).
 
         metadata should include: title, duration, thumbnail, etc.
+        video_path is returned when keep_video=True, else None.
         """
         ...
 

@@ -59,7 +59,7 @@ def test_index_html_served(client):
     resp = client.get("/")
     assert resp.status_code == 200
     assert "text/html" in resp.headers["content-type"]
-    assert "视频摘要工具" in resp.text
+    assert "Video Summarizer" in resp.text
 
 
 def test_css_served(client):

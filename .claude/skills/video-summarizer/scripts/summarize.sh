@@ -6,13 +6,14 @@ POLL_INTERVAL=3
 TIMEOUT=300
 
 usage() {
-    echo "Usage: $0 <url> [--lang LANG] [--provider PROVIDER] [--detail DETAIL] [--no-poll]"
+    echo "Usage: $0 <url> [--lang LANG] [--provider PROVIDER] [--detail DETAIL] [--mode MODE] [--no-poll]"
     echo ""
     echo "Options:"
     echo "  url              Video URL (Bilibili)"
     echo "  --lang LANG      Language: zh (default), en, ja"
     echo "  --provider LLM   Provider: claude (default), openai"
     echo "  --detail LEVEL   Detail: brief, normal (default), detailed"
+    echo "  --mode MODE      Mode: audio (default), multimodal"
     echo "  --no-poll        Submit only, print task_id and exit"
     exit 1
 }
@@ -26,6 +27,7 @@ URL=""
 LANG="zh"
 PROVIDER="claude"
 DETAIL="normal"
+MODE="audio"
 NO_POLL=false
 
 while [ $# -gt 0 ]; do
@@ -33,6 +35,7 @@ while [ $# -gt 0 ]; do
         --lang)     LANG="$2"; shift 2 ;;
         --provider) PROVIDER="$2"; shift 2 ;;
         --detail)   DETAIL="$2"; shift 2 ;;
+        --mode)     MODE="$2"; shift 2 ;;
         --no-poll)  NO_POLL=true; shift ;;
         -*)         echo "Unknown option: $1"; usage ;;
         *)
@@ -64,7 +67,7 @@ fi
 echo "提交任务..."
 RESP=$(curl -sf --connect-timeout 3 -X POST "$BASE_URL/api/summarize" \
     -H "Content-Type: application/json" \
-    -d "{\"url\": \"$URL\", \"language\": \"$LANG\", \"llm_provider\": \"$PROVIDER\", \"detail\": \"$DETAIL\"}" 2>/dev/null || echo "")
+    -d "{\"url\": \"$URL\", \"language\": \"$LANG\", \"llm_provider\": \"$PROVIDER\", \"detail\": \"$DETAIL\", \"mode\": \"$MODE\"}" 2>/dev/null || echo "")
 
 if [ -z "$RESP" ]; then
     echo "Error: 提交失败，无法连接服务"
@@ -87,7 +90,7 @@ fi
 
 # --- Poll ---
 ELAPSED=0
-STATUS_LABELS='{"pending":"等待中","downloading":"下载中","transcribing":"转录中","summarizing":"总结中","done":"完成","failed":"失败"}'
+STATUS_LABELS='{"pending":"等待中","downloading":"下载中","transcribing":"转录中","extracting_frames":"提取关键帧中","summarizing":"总结中","done":"完成","failed":"失败"}'
 
 while [ $ELAPSED -lt $TIMEOUT ]; do
     TASK_RESP=$(curl -sf --connect-timeout 3 "$BASE_URL/api/tasks/$TASK_ID" 2>/dev/null || echo "{}")

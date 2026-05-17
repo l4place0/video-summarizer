@@ -1,4 +1,4 @@
-"""Tests for Phase 03 — Skill wrapper scripts."""
+"""Tests for Skill wrapper scripts."""
 import os
 import socket
 import subprocess
@@ -23,7 +23,7 @@ SETTINGS_TARGETS = [
 
 MOCK_DOWNLOAD = "app.platforms.bilibili.BilibiliPlatform.download"
 MOCK_TRANSCRIBE = "app.core.pipeline.transcribe"
-MOCK_CLAUDE_SUMMARIZE = "app.llm.claude.ClaudeLLM.summarize"
+MOCK_GET_LLM = "app.core.pipeline.get_llm"
 
 
 def _make_settings(tmp_dir):
@@ -32,6 +32,7 @@ def _make_settings(tmp_dir):
     s.cache_dir = Path(tmp_dir) / "cache"
     s.audio_dir = Path(tmp_dir) / "cache" / "audio"
     s.transcript_dir = Path(tmp_dir) / "cache" / "transcripts"
+    s.frames_dir = Path(tmp_dir) / "cache" / "frames"
     s.db_path = Path(tmp_dir) / "test.db"
     s.whisper_model = "base"
     s.llm_provider = "claude"
@@ -45,19 +46,25 @@ def _make_settings(tmp_dir):
     return s
 
 
-def _mock_download(url, output_dir):
+def _mock_download(url, output_dir, keep_video=False):
     output_dir.mkdir(parents=True, exist_ok=True)
-    audio_path = output_dir / "test.wav"
+    from app.platforms.bilibili import BilibiliPlatform
+    video_id = BilibiliPlatform().parse_url(url)
+    audio_path = output_dir / f"{video_id}.wav"
     audio_path.write_bytes(b"fake audio data")
-    return audio_path, {"title": "Test Video Title", "duration": 125, "video_id": "BV123"}
+    return audio_path, {"title": "Test Video Title", "duration": 125, "video_id": video_id}, None
 
 
 def _mock_transcribe(audio_path, language="zh"):
     return "这是一段测试转录文本内容。"
 
 
-def _mock_summarize(transcript, lang="zh", detail="normal"):
-    return "这是一个测试视频摘要。"
+def _make_mock_llm(summary="这是一个测试视频摘要。"):
+    llm = MagicMock()
+    llm.classify.return_value = {"summary": "test", "type": "general"}
+    llm.summarize.return_value = summary
+    llm.summarize_multimodal.return_value = summary
+    return llm
 
 
 def _free_port():
@@ -95,7 +102,6 @@ def server(tmp_path):
     thread = threading.Thread(target=srv.run, daemon=True)
     thread.start()
 
-    # Wait for server to be ready
     url = f"http://127.0.0.1:{port}"
     for _ in range(30):
         try:
@@ -114,7 +120,6 @@ def server(tmp_path):
 # === summarize.sh tests ===
 
 def test_summarize_no_service():
-    """Service not running → error message and exit 1."""
     r = _run(
         f"bash {SUMMARIZE} https://bilibili.com/video/BV123",
         env_vars={"VIDEO_SUMMARIZER_URL": "http://127.0.0.1:19999"},
@@ -125,14 +130,12 @@ def test_summarize_no_service():
 
 
 def test_summarize_no_args():
-    """No args → usage message."""
     r = _run(f"bash {SUMMARIZE}")
     assert r.returncode == 1
     assert "Usage" in r.stdout or "Usage" in r.stderr
 
 
 def test_summarize_invalid_url(server):
-    """Invalid URL → 400 error."""
     r = _run(
         f"bash {SUMMARIZE} https://youtube.com/watch?v=abc",
         env_vars={"VIDEO_SUMMARIZER_URL": server},
@@ -141,10 +144,9 @@ def test_summarize_invalid_url(server):
 
 
 def test_summarize_no_poll(server, tmp_path):
-    """--no-poll → returns task_id immediately."""
     with patch(MOCK_DOWNLOAD, side_effect=_mock_download), \
          patch(MOCK_TRANSCRIBE, side_effect=_mock_transcribe), \
-         patch(MOCK_CLAUDE_SUMMARIZE, side_effect=_mock_summarize):
+         patch(MOCK_GET_LLM, return_value=_make_mock_llm()):
 
         r = _run(
             f"bash {SUMMARIZE} https://bilibili.com/video/BV123 --no-poll",
@@ -159,10 +161,9 @@ def test_summarize_no_poll(server, tmp_path):
 
 
 def test_summarize_full_flow(server):
-    """Full flow: submit → poll → done with summary output."""
     with patch(MOCK_DOWNLOAD, side_effect=_mock_download), \
          patch(MOCK_TRANSCRIBE, side_effect=_mock_transcribe), \
-         patch(MOCK_CLAUDE_SUMMARIZE, side_effect=_mock_summarize):
+         patch(MOCK_GET_LLM, return_value=_make_mock_llm()):
 
         r = _run(
             f"bash {SUMMARIZE} https://bilibili.com/video/BV123",
@@ -177,10 +178,9 @@ def test_summarize_full_flow(server):
 
 
 def test_summarize_with_options(server):
-    """Options: --lang en --provider openai --detail brief."""
     with patch(MOCK_DOWNLOAD, side_effect=_mock_download), \
          patch(MOCK_TRANSCRIBE, side_effect=_mock_transcribe), \
-         patch("app.llm.openai_proto.OpenAILLM.summarize", side_effect=_mock_summarize):
+         patch(MOCK_GET_LLM, return_value=_make_mock_llm()):
 
         r = _run(
             f"bash {SUMMARIZE} https://bilibili.com/video/BV123 --lang en --provider openai --detail brief --no-poll",
@@ -194,7 +194,6 @@ def test_summarize_with_options(server):
 # === status.sh tests ===
 
 def test_status_no_service():
-    """Service not running → error."""
     r = _run(
         f"bash {STATUS}",
         env_vars={"VIDEO_SUMMARIZER_URL": "http://127.0.0.1:19999"},
@@ -205,7 +204,6 @@ def test_status_no_service():
 
 
 def test_status_running(server):
-    """Service running → shows status."""
     r = _run(f"bash {STATUS}", env_vars={"VIDEO_SUMMARIZER_URL": server}, timeout=10)
     assert r.returncode == 0
     assert "运行中" in r.stdout
@@ -213,10 +211,9 @@ def test_status_running(server):
 
 
 def test_status_with_tasks(server):
-    """After creating a task → shows in recent list."""
     with patch(MOCK_DOWNLOAD, side_effect=_mock_download), \
          patch(MOCK_TRANSCRIBE, side_effect=_mock_transcribe), \
-         patch(MOCK_CLAUDE_SUMMARIZE, side_effect=_mock_summarize):
+         patch(MOCK_GET_LLM, return_value=_make_mock_llm()):
 
         _run(
             f"bash {SUMMARIZE} https://bilibili.com/video/BV123 --no-poll",
@@ -231,10 +228,9 @@ def test_status_with_tasks(server):
 
 
 def test_status_task_detail(server):
-    """--task <id> → shows task detail."""
     with patch(MOCK_DOWNLOAD, side_effect=_mock_download), \
          patch(MOCK_TRANSCRIBE, side_effect=_mock_transcribe), \
-         patch(MOCK_CLAUDE_SUMMARIZE, side_effect=_mock_summarize):
+         patch(MOCK_GET_LLM, return_value=_make_mock_llm()):
 
         r = _run(
             f"bash {SUMMARIZE} https://bilibili.com/video/BV123 --no-poll",
@@ -254,14 +250,12 @@ def test_status_task_detail(server):
 
 
 def test_status_cleanup(server):
-    """--cleanup → deletes all data."""
     r = _run(f"bash {STATUS} --cleanup", env_vars={"VIDEO_SUMMARIZER_URL": server}, timeout=10)
     assert r.returncode == 0
     assert "已删除" in r.stdout
 
 
 def test_status_task_not_found(server):
-    """--task with bad id → error."""
     r = _run(
         f"bash {STATUS} --task nonexistent",
         env_vars={"VIDEO_SUMMARIZER_URL": server},

@@ -73,6 +73,18 @@ class Storage:
         self._conn.commit()
         return cur.rowcount
 
+    def find_cached_task(self, video_id: str) -> dict | None:
+        """Find a completed task with the same video_id for cache reuse."""
+        rows = self._conn.execute(
+            "SELECT * FROM tasks WHERE status = 'done' ORDER BY created_at DESC"
+        ).fetchall()
+        for row in rows:
+            d = self._row_to_dict(row)
+            meta = d.get("metadata")
+            if isinstance(meta, dict) and meta.get("video_id") == video_id:
+                return d
+        return None
+
     def task_count(self) -> int:
         return self._conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
 

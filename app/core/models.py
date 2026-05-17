@@ -9,6 +9,8 @@ class TaskStatus(str, Enum):
     PENDING = "pending"
     DOWNLOADING = "downloading"
     TRANSCRIBING = "transcribing"
+    EXTRACTING_FRAMES = "extracting_frames"
+    CLASSIFYING = "classifying"
     SUMMARIZING = "summarizing"
     DONE = "done"
     FAILED = "failed"
@@ -19,6 +21,7 @@ class SummarizeRequest(BaseModel):
     language: str = "zh"
     llm_provider: str = "claude"
     detail: str = "normal"
+    mode: str = "audio"
 
 
 class TaskResponse(BaseModel):

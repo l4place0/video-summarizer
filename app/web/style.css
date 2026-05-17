@@ -237,6 +237,7 @@ th {
 .status-pending    { background: var(--gray); color: #fff; }
 .status-downloading,
 .status-transcribing,
+.status-extracting_frames,
 .status-summarizing { background: var(--accent); color: #fff; }
 .status-done       { background: var(--green); color: #fff; }
 .status-failed     { background: var(--red); color: #fff; }

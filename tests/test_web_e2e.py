@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 MOCK_DOWNLOAD = "app.platforms.bilibili.BilibiliPlatform.download"
 MOCK_TRANSCRIBE = "app.core.pipeline.transcribe"
-MOCK_CLAUDE_SUMMARIZE = "app.llm.claude.ClaudeLLM.summarize"
+MOCK_GET_LLM = "app.core.pipeline.get_llm"
 
 SETTINGS_TARGETS = [
     "app.core.pipeline.settings",
@@ -25,6 +25,7 @@ def _make_settings(tmp_dir):
     s.cache_dir = Path(tmp_dir) / "cache"
     s.audio_dir = Path(tmp_dir) / "cache" / "audio"
     s.transcript_dir = Path(tmp_dir) / "cache" / "transcripts"
+    s.frames_dir = Path(tmp_dir) / "cache" / "frames"
     s.db_path = Path(tmp_dir) / "test.db"
     s.whisper_model = "base"
     s.llm_provider = "claude"
@@ -38,27 +39,29 @@ def _make_settings(tmp_dir):
     return s
 
 
-def _mock_download(url, output_dir):
+def _mock_download(url, output_dir, keep_video=False):
     output_dir.mkdir(parents=True, exist_ok=True)
-    audio_path = output_dir / "test.wav"
+    from app.platforms.bilibili import BilibiliPlatform
+    video_id = BilibiliPlatform().parse_url(url)
+    audio_path = output_dir / f"{video_id}.wav"
     audio_path.write_bytes(b"fake audio data")
-    return audio_path, {"title": "Linux网络命名空间核心", "duration": 360, "video_id": "BV1xx411c7mq"}
+    return audio_path, {"title": "Linux网络命名空间核心", "duration": 360, "video_id": video_id}, None
 
 
 def _mock_transcribe(audio_path, language="zh"):
     return "这是一段关于Linux网络命名空间的详细讲解。首先介绍了什么是网络命名空间..."
 
 
-def _mock_summarize(transcript, lang="zh", detail="normal"):
-    return "本视频详细讲解了Linux网络命名空间的核心概念，包括隔离原理、veth pair配置和实际应用场景。"
-
-
-def _mock_download_error(url, output_dir):
+def _mock_download_error(url, output_dir, keep_video=False):
     raise ConnectionError("网络连接超时")
 
 
-def _mock_summarize_error(transcript, lang="zh", detail="normal"):
-    raise RuntimeError("API key invalid")
+def _make_mock_llm(summary="本视频详细讲解了Linux网络命名空间的核心概念，包括隔离原理、veth pair配置和实际应用场景。", content_type="general"):
+    llm = MagicMock()
+    llm.classify.return_value = {"summary": "Linux网络命名空间", "type": content_type}
+    llm.summarize.return_value = summary
+    llm.summarize_multimodal.return_value = summary
+    return llm
 
 
 @pytest.fixture
@@ -89,16 +92,15 @@ def _wait_done(client, task_id, timeout=15):
     return data
 
 
-# === 验收场景 1: 访问 localhost:8000 显示 Web 页面 ===
+# === Scenario 1: Homepage ===
 
 def test_scenario_1_homepage(client):
-    """浏览器访问 / 显示完整 Web 页面"""
+    """GET / shows full web page."""
     resp = client.get("/")
     assert resp.status_code == 200
     html = resp.text
 
-    # 页面结构完整
-    assert "视频摘要工具" in html
+    assert "Video Summarizer" in html
     assert 'id="url-input"' in html
     assert 'id="language-select"' in html
     assert 'id="provider-select"' in html
@@ -110,29 +112,28 @@ def test_scenario_1_homepage(client):
     assert 'src="/app.js"' in html
 
 
-# === 验收场景 2: 输入 URL 并提交，任务创建，状态实时更新 ===
+# === Scenario 2: Submit and status updates ===
 
 def test_scenario_2_submit_and_status_updates(client):
-    """提交 URL → 任务创建 → 状态流转 pending→downloading→transcribing→summarizing→done"""
+    """Submit URL → task created → status transitions."""
     statuses_seen = []
 
-    def track_download(url, output_dir):
+    def track_download(url, output_dir, keep_video=False):
         statuses_seen.append("downloading")
-        return _mock_download(url, output_dir)
+        return _mock_download(url, output_dir, keep_video)
 
     def track_transcribe(audio_path, language="zh"):
         statuses_seen.append("transcribing")
         return _mock_transcribe(audio_path, language)
 
-    def track_summarize(transcript, lang="zh", detail="normal"):
-        statuses_seen.append("summarizing")
-        return _mock_summarize(transcript, lang, detail)
+    llm = MagicMock()
+    llm.classify.side_effect = lambda *a, **kw: (statuses_seen.append("classifying"), {"summary": "", "type": "general"})[1]
+    llm.summarize.side_effect = lambda *a, **kw: (statuses_seen.append("summarizing"), "本视频详细讲解了Linux网络命名空间的核心概念，包括隔离原理、veth pair配置和实际应用场景。")[1]
 
     with patch(MOCK_DOWNLOAD, side_effect=track_download), \
          patch(MOCK_TRANSCRIBE, side_effect=track_transcribe), \
-         patch(MOCK_CLAUDE_SUMMARIZE, side_effect=track_summarize):
+         patch(MOCK_GET_LLM, return_value=llm):
 
-        # 提交任务
         resp = client.post("/api/summarize", json={
             "url": "https://bilibili.com/video/BV1xx411c7mq",
             "language": "zh",
@@ -142,19 +143,18 @@ def test_scenario_2_submit_and_status_updates(client):
         task_id = resp.json()["task_id"]
         assert resp.json()["status"] == "pending"
 
-        # 轮询状态（模拟前端行为）
         data = _wait_done(client, task_id)
         assert data["status"] == "done"
-        assert statuses_seen == ["downloading", "transcribing", "summarizing"]
+        assert statuses_seen == ["downloading", "transcribing", "classifying", "summarizing"]
 
 
-# === 验收场景 3: 任务完成，摘要正确展示，含标题和元数据 ===
+# === Scenario 3: Done shows summary ===
 
 def test_scenario_3_done_shows_summary(client):
-    """任务完成 → 返回标题、摘要、转录、元数据"""
+    """Task done → returns title, summary, transcript, metadata."""
     with patch(MOCK_DOWNLOAD, side_effect=_mock_download), \
          patch(MOCK_TRANSCRIBE, side_effect=_mock_transcribe), \
-         patch(MOCK_CLAUDE_SUMMARIZE, side_effect=_mock_summarize):
+         patch(MOCK_GET_LLM, return_value=_make_mock_llm()):
 
         resp = client.post("/api/summarize", json={"url": "https://bilibili.com/video/BV1xx411c7mq"})
         task_id = resp.json()["task_id"]
@@ -169,13 +169,16 @@ def test_scenario_3_done_shows_summary(client):
         assert data["completed_at"] is not None
 
 
-# === 验收场景 4: 任务失败，错误信息展示，红色状态 ===
+# === Scenario 4: Failed shows error ===
 
 def test_scenario_4_failed_shows_error(client):
-    """任务失败 → 返回错误信息，status=failed"""
+    """Task failed → returns error message."""
+    llm = _make_mock_llm()
+    llm.classify.side_effect = RuntimeError("API key invalid")
+
     with patch(MOCK_DOWNLOAD, side_effect=_mock_download), \
          patch(MOCK_TRANSCRIBE, side_effect=_mock_transcribe), \
-         patch(MOCK_CLAUDE_SUMMARIZE, side_effect=_mock_summarize_error):
+         patch(MOCK_GET_LLM, return_value=llm):
 
         resp = client.post("/api/summarize", json={"url": "https://bilibili.com/video/BV1xx411c7mq"})
         task_id = resp.json()["task_id"]
@@ -186,7 +189,7 @@ def test_scenario_4_failed_shows_error(client):
 
 
 def test_scenario_4b_download_error(client):
-    """下载失败 → 返回错误信息"""
+    """Download failed → returns error."""
     with patch(MOCK_DOWNLOAD, side_effect=_mock_download_error):
         resp = client.post("/api/summarize", json={"url": "https://bilibili.com/video/BV1xx411c7mq"})
         task_id = resp.json()["task_id"]
@@ -196,19 +199,17 @@ def test_scenario_4b_download_error(client):
         assert "网络连接超时" in data["error"]
 
 
-# === 验收场景 5: 页面刷新，历史任务列表加载 ===
+# === Scenario 5: History after refresh ===
 
 def test_scenario_5_history_after_refresh(client):
-    """完成任务后 → GET /api/tasks 返回历史列表"""
+    """After task done → GET /api/tasks returns history."""
     with patch(MOCK_DOWNLOAD, side_effect=_mock_download), \
          patch(MOCK_TRANSCRIBE, side_effect=_mock_transcribe), \
-         patch(MOCK_CLAUDE_SUMMARIZE, side_effect=_mock_summarize):
+         patch(MOCK_GET_LLM, return_value=_make_mock_llm()):
 
-        # 创建并完成一个任务
         resp = client.post("/api/summarize", json={"url": "https://bilibili.com/video/BV1xx411c7mq"})
         _wait_done(client, resp.json()["task_id"])
 
-        # 模拟页面刷新：请求历史列表
         resp = client.get("/api/tasks")
         assert resp.status_code == 200
         tasks = resp.json()["tasks"]
@@ -220,19 +221,18 @@ def test_scenario_5_history_after_refresh(client):
         assert task["summary"] is not None
 
 
-# === 验收场景 6: 点击历史任务，详情加载到结果区 ===
+# === Scenario 6: View history task ===
 
 def test_scenario_6_view_history_task(client):
-    """点击查看 → GET /api/tasks/{id} 返回完整详情"""
+    """Click view → GET /api/tasks/{id} returns full detail."""
     with patch(MOCK_DOWNLOAD, side_effect=_mock_download), \
          patch(MOCK_TRANSCRIBE, side_effect=_mock_transcribe), \
-         patch(MOCK_CLAUDE_SUMMARIZE, side_effect=_mock_summarize):
+         patch(MOCK_GET_LLM, return_value=_make_mock_llm()):
 
         resp = client.post("/api/summarize", json={"url": "https://bilibili.com/video/BV1xx411c7mq"})
         task_id = resp.json()["task_id"]
         _wait_done(client, task_id)
 
-        # 模拟点击"查看"
         resp = client.get(f"/api/tasks/{task_id}")
         assert resp.status_code == 200
         detail = resp.json()
@@ -244,70 +244,65 @@ def test_scenario_6_view_history_task(client):
         assert detail["metadata"]["title"] == "Linux网络命名空间核心"
 
 
-# === 验收场景 7: 清理存储，确认后执行，占用清零 ===
+# === Scenario 7: Cleanup storage ===
 
 def test_scenario_7_cleanup_storage(client):
-    """清理存储 → 删除所有任务和缓存"""
+    """Cleanup → deletes all tasks and cache."""
     with patch(MOCK_DOWNLOAD, side_effect=_mock_download), \
          patch(MOCK_TRANSCRIBE, side_effect=_mock_transcribe), \
-         patch(MOCK_CLAUDE_SUMMARIZE, side_effect=_mock_summarize):
+         patch(MOCK_GET_LLM, return_value=_make_mock_llm()):
 
-        # 先创建一个任务
         resp = client.post("/api/summarize", json={"url": "https://bilibili.com/video/BV1xx411c7mq"})
         _wait_done(client, resp.json()["task_id"])
 
-        # 查看存储占用
         resp = client.get("/api/storage")
         info = resp.json()
         assert info["task_count"] >= 1
 
-        # 清理存储
         resp = client.delete("/api/storage")
         assert resp.status_code == 200
         result = resp.json()
         assert result["deleted_tasks"] >= 1
 
-        # 验证清空
         resp = client.get("/api/storage")
         info = resp.json()
         assert info["task_count"] == 0
 
 
-# === 验收场景 8: 无效 URL 提交，前端校验拒绝 ===
+# === Scenario 8: Invalid URL rejected ===
 
 def test_scenario_8_invalid_url_rejected(client):
-    """无效 URL → 400 拒绝，不创建任务"""
+    """Invalid URL → 400, no task created."""
     resp = client.post("/api/summarize", json={"url": "https://youtube.com/watch?v=abc"})
     assert resp.status_code == 400
 
-    # 确认没有创建任务
     resp = client.get("/api/tasks")
     assert len(resp.json()["tasks"]) == 0
 
 
-# === 额外: 静态资源完整性 ===
+# === Static assets ===
 
 def test_static_assets_all_served(client):
-    """CSS/JS 均可正常加载"""
+    """CSS/JS served correctly."""
     assert client.get("/style.css").status_code == 200
     assert client.get("/app.js").status_code == 200
 
 
 def test_api_not_overridden_by_static(client):
-    """静态挂载不覆盖 API 路由"""
+    """Static mount doesn't override API routes."""
     assert client.get("/health").status_code == 200
     assert client.get("/api/tasks").status_code == 200
     assert client.get("/api/storage").status_code == 200
     assert client.post("/api/summarize", json={"url": "https://youtube.com/x"}).status_code == 400
 
 
-# === 额外: 多任务场景 ===
+# === Multi-task ===
 
 def test_multiple_tasks(client):
-    """多个任务并行，历史列表完整"""
+    """Multiple tasks in parallel, history complete."""
     with patch(MOCK_DOWNLOAD, side_effect=_mock_download), \
          patch(MOCK_TRANSCRIBE, side_effect=_mock_transcribe), \
-         patch(MOCK_CLAUDE_SUMMARIZE, side_effect=_mock_summarize):
+         patch(MOCK_GET_LLM, return_value=_make_mock_llm()):
 
         ids = []
         for _ in range(3):

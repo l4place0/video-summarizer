@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_base_url: str = ""
     openai_model: str = "gpt-4o"
+    openai_vision_model: str = ""  # vision-capable model for multimodal; empty = use openai_model
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
 
@@ -21,6 +22,12 @@ class Settings(BaseSettings):
 
     # Cookies (for Bilibili etc.)
     cookies_path: Path = Path("data/cookies.txt")
+
+    # Vision / frame extraction
+    frame_mode: str = "interval"
+    max_frames: int = 10
+    frame_interval: int = 30
+    scene_threshold: float = 0.3
 
     # Storage
     data_dir: Path = Path("data")
@@ -41,8 +48,12 @@ class Settings(BaseSettings):
     def transcript_dir(self) -> Path:
         return self.cache_dir / "transcripts"
 
+    @property
+    def frames_dir(self) -> Path:
+        return self.cache_dir / "frames"
+
     def ensure_dirs(self) -> None:
-        for d in [self.data_dir, self.cache_dir, self.audio_dir, self.transcript_dir]:
+        for d in [self.data_dir, self.cache_dir, self.audio_dir, self.transcript_dir, self.frames_dir]:
             d.mkdir(parents=True, exist_ok=True)
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}

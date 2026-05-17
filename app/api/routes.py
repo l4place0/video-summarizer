@@ -41,7 +41,7 @@ async def summarize(req: SummarizeRequest):
     # Run pipeline in background thread
     thread = threading.Thread(
         target=run_pipeline,
-        args=(task_id, req.url, req.language, req.llm_provider, req.detail),
+        args=(task_id, req.url, req.language, req.llm_provider, req.detail, req.mode),
         daemon=True,
     )
     thread.start()

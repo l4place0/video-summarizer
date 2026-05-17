@@ -29,7 +29,18 @@ bash .claude/skills/video-summarizer/scripts/summarize.sh "<URL>" \
   --lang zh          # Language: zh (default), en, ja
   --provider claude  # LLM: claude (default), openai
   --detail normal    # Detail: brief, normal (default), detailed
+  --mode audio       # Mode: audio (default), multimodal
 ```
+
+### Multimodal Mode
+
+When the user asks for a more visual/complete summary, use `--mode multimodal`:
+
+```bash
+bash .claude/skills/video-summarizer/scripts/summarize.sh "<URL>" --mode multimodal
+```
+
+This extracts key frames from the video and sends them along with the audio transcript to the LLM for a richer summary that includes visual content analysis.
 
 ## Output Format
 
