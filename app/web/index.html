@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频摘要工具</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <h1>视频摘要工具</h1>
+    </header>
+
+    <main>
+        <!-- 输入区 -->
+        <section id="input-section">
+            <form id="submit-form">
+                <input type="text" id="url-input" placeholder="输入视频链接 (Bilibili)" required autocomplete="off">
+                <select id="language-select">
+                    <option value="zh">中文</option>
+                    <option value="en">English</option>
+                    <option value="ja">日本語</option>
+                </select>
+                <select id="provider-select">
+                    <option value="claude">Claude</option>
+                    <option value="openai">OpenAI</option>
+                </select>
+                <button type="submit" id="submit-btn">提交</button>
+            </form>
+        </section>
+
+        <!-- 结果区 -->
+        <section id="result-section" class="hidden">
+            <div id="result-status">
+                <span id="status-text"></span>
+                <div id="progress-bar"><div id="progress-fill"></div></div>
+            </div>
+            <div id="result-content">
+                <h2 id="result-title"></h2>
+                <div id="result-meta"></div>
+                <div id="result-summary"></div>
+                <button id="toggle-transcript" class="hidden">展开转录原文</button>
+                <pre id="result-transcript" class="hidden"></pre>
+            </div>
+            <div id="result-error" class="hidden"></div>
+        </section>
+
+        <!-- 历史区 -->
+        <section id="history-section">
+            <div class="section-header">
+                <h2>任务历史</h2>
+                <div id="storage-info"></div>
+                <button id="cleanup-btn" class="danger-btn">清理存储</button>
+            </div>
+            <div id="history-table-wrap">
+                <table id="history-table">
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>标题</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-body"></tbody>
+                </table>
+                <p id="history-empty" class="hidden">暂无任务</p>
+            </div>
+        </section>
+    </main>
+
+    <script src="/app.js"></script>
+</body>
+</html>
