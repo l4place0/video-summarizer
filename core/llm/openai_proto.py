@@ -44,7 +44,15 @@ class OpenAILLM(BaseLLM):
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
         )
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        finish_reason = response.choices[0].finish_reason
+
+        # MIMO API bug: sometimes returns empty content with finish_reason=length
+        if not content and finish_reason == "length":
+            logger.warning("MIMO API returned empty content with finish_reason=length, retrying")
+            raise ValueError("Empty response from API")
+
+        return content or ""
 
     def _chat_multimodal(self, content: list[dict], max_tokens: int = 4096) -> str:
         model = settings.openai_vision_model or settings.openai_model
