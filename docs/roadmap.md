@@ -10,18 +10,32 @@
 - SQLite 存储 + 清理 API
 - REST API 端点
 
-## Phase 02 — Web UI (current)
+## Phase 02 — Web UI (done)
 最小可用的 Web 界面。
 - 纯静态前端 (HTML + CSS + JS)，无框架
 - 输入 URL，展示摘要结果
 - 任务历史列表
 - 存储清理入口
 
-## Phase 03 — Skill Package
+## Phase 03 — Skill Package (done)
 打包为 Claude Code Skill。
 - SKILL.md + wrapper script
 - 服务健康检测
 - 参数解析与输出格式化
+
+## Phase 04 — 多模态视频总结 (done)
+视频关键帧采样 + 音频转录联合总结。
+- 两阶段提示：内容分类 → 专用结构化总结
+- 7 种内容类型：tutorial, tech_talk, demo, review, news, vlog, general
+- 多模态支持：关键帧提取 + native video fallback
+- 视频缓存：相同 video_id 跳过下载/转录
+
+## Phase 05 — YouTube 支持 (done)
+扩展平台抽象层，支持 YouTube 视频。
+- YouTubePlatform 类（youtube.com, youtu.be, embed）
+- 与 BilibiliPlatform 共用 yt-dlp 下载逻辑
+- 集成测试覆盖
+- Web UI / Skill 文档更新
 
 ---
 

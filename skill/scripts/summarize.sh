@@ -9,7 +9,7 @@ usage() {
     echo "Usage: $0 <url> [--lang LANG] [--provider PROVIDER] [--detail DETAIL] [--mode MODE] [--no-poll]"
     echo ""
     echo "Options:"
-    echo "  url              Video URL (Bilibili)"
+    echo "  url              Video URL (Bilibili / YouTube)"
     echo "  --lang LANG      Language: zh (default), en, ja"
     echo "  --provider LLM   Provider: claude (default), openai"
     echo "  --detail LEVEL   Detail: brief, normal (default), detailed"

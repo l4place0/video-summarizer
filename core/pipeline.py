@@ -8,12 +8,14 @@ from core.config import settings
 from core.llm import get_llm
 from core.platforms.base import BasePlatform
 from core.platforms.bilibili import BilibiliPlatform
+from core.platforms.youtube import YouTubePlatform
 from core.storage.db import Storage
 
 logger = logging.getLogger(__name__)
 
 PLATFORMS: list[BasePlatform] = [
     BilibiliPlatform(),
+    YouTubePlatform(),
 ]
 
 

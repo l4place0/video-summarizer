@@ -30,7 +30,7 @@ class BaseLLM(ABC):
         """Stage 1: Quick classification. Returns {"summary": str, "type": str}."""
         prompt = get_classify_prompt(lang, multimodal).format(transcript=transcript[:3000])
         try:
-            raw = self._chat(prompt, max_tokens=200)
+            raw = self._chat(prompt, max_tokens=500)
             # Extract JSON from response (handle markdown code blocks)
             text = raw.strip()
             if text.startswith("```"):

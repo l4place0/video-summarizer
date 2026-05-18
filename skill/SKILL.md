@@ -1,15 +1,15 @@
 ---
 name: video-summarizer
 description: >-
-  Summarize videos from Bilibili using ASR (Whisper) + LLM. Triggers when user
-  shares a Bilibili video URL, asks to summarize/transcribe a video, or types
-  /summarize. Supports Chinese/English/Japanese, Claude/OpenAI providers.
-  Use for: video summarization, video transcription, bilibili summary.
+  Summarize videos from Bilibili and YouTube using ASR (Whisper) + LLM. Triggers when user
+  shares a video URL, asks to summarize/transcribe a video, or types /summarize.
+  Supports Chinese/English/Japanese, Claude/OpenAI providers.
+  Use for: video summarization, video transcription, bilibili summary, youtube summary.
 ---
 
 # Video Summarizer
 
-Summarize Bilibili videos via ASR + LLM pipeline.
+Summarize videos from Bilibili and YouTube via ASR + LLM pipeline.
 
 ## How to Use
 

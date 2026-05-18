@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 # Mock paths — target where the name is USED (imported), not where it's defined
 MOCK_TRANSCRIBE = "core.pipeline.transcribe"
 MOCK_DOWNLOAD = "core.platforms.bilibili.BilibiliPlatform.download"
+MOCK_YT_DOWNLOAD = "core.platforms.youtube.YouTubePlatform.download"
 MOCK_GET_LLM = "core.pipeline.get_llm"
 
 # All modules that do `from core.config import settings`
@@ -29,6 +30,15 @@ def _mock_download(url, output_dir, keep_video=False):
     audio_path = output_dir / f"{video_id}.wav"
     audio_path.write_bytes(b"fake audio")
     return audio_path, {"title": "Test Video", "duration": 120, "video_id": video_id}, None
+
+
+def _mock_yt_download(url, output_dir, keep_video=False):
+    output_dir.mkdir(parents=True, exist_ok=True)
+    from core.platforms.youtube import YouTubePlatform
+    video_id = YouTubePlatform().parse_url(url)
+    audio_path = output_dir / f"{video_id}.wav"
+    audio_path.write_bytes(b"fake audio")
+    return audio_path, {"title": "YouTube Video", "duration": 300, "video_id": video_id}, None
 
 
 def _mock_transcribe(audio_path, language="zh"):
@@ -255,3 +265,34 @@ def test_content_type_routing(client):
         llm.classify.assert_called_once()
         call_kwargs = llm.summarize.call_args
         assert call_kwargs[1].get("content_type") == "tutorial" or (len(call_kwargs[0]) > 3 and call_kwargs[0][3] == "tutorial")
+
+
+def test_youtube_happy_path(client):
+    with patch(MOCK_YT_DOWNLOAD, side_effect=_mock_yt_download), \
+         patch(MOCK_TRANSCRIBE, side_effect=_mock_transcribe), \
+         patch(MOCK_GET_LLM, return_value=_make_mock_llm("YouTube摘要")):
+
+        r = client.post("/api/summarize", json={"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"})
+        assert r.status_code == 202
+        task_id = r.json()["task_id"]
+
+        data = _wait_done(client, task_id)
+        assert data["status"] == "done", f"got {data['status']}: {data.get('error')}"
+        assert data["summary"] == "YouTube摘要"
+        assert data["metadata"]["title"] == "YouTube Video"
+
+
+def test_youtube_short_url(client):
+    with patch(MOCK_YT_DOWNLOAD, side_effect=_mock_yt_download), \
+         patch(MOCK_TRANSCRIBE, side_effect=_mock_transcribe), \
+         patch(MOCK_GET_LLM, return_value=_make_mock_llm("摘要")):
+
+        r = client.post("/api/summarize", json={"url": "https://youtu.be/dQw4w9WgXcQ"})
+        assert r.status_code == 202
+        data = _wait_done(client, r.json()["task_id"])
+        assert data["status"] == "done"
+
+
+def test_youtube_invalid_url_400(client):
+    r = client.post("/api/summarize", json={"url": "https://youtube.com/x"})
+    assert r.status_code == 400
