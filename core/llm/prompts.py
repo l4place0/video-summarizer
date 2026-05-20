@@ -333,11 +333,24 @@ MULTIMODAL_SUFFIX = {
 
 
 def get_classify_prompt(lang: str = "zh", multimodal: bool = False) -> str:
+    # Check custom store first
+    from core.llm.prompt_store import get_prompt_store
+    custom = get_prompt_store().get_classify(lang, multimodal)
+    if custom:
+        return custom
     prompts = CLASSIFY_PROMPT_MULTIMODAL if multimodal else CLASSIFY_PROMPT
     return prompts.get(lang, prompts["zh"])
 
 
 def get_summary_prompt(content_type: str, lang: str = "zh", multimodal: bool = False) -> str:
+    # Check custom store first
+    from core.llm.prompt_store import get_prompt_store
+    custom = get_prompt_store().get_summary(content_type, lang)
+    if custom:
+        if multimodal:
+            suffix = MULTIMODAL_SUFFIX.get(lang, MULTIMODAL_SUFFIX["zh"])
+            return custom + suffix
+        return custom
     type_prompts = SUMMARY_PROMPTS.get(content_type, SUMMARY_PROMPTS["general"])
     prompt = type_prompts.get(lang, type_prompts["zh"])
     if multimodal:

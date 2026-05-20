@@ -19,6 +19,8 @@ class Settings(BaseSettings):
 
     # Whisper
     whisper_model: str = "medium"
+    whisper_backend: str = "faster"  # "faster" or "openai"
+    hf_endpoint: str = ""  # HuggingFace mirror endpoint, e.g. https://hf-mirror.com
 
     # Cookies (for Bilibili etc.)
     cookies_path: Path = Path("data/cookies.txt")
@@ -31,6 +33,7 @@ class Settings(BaseSettings):
 
     # Storage
     data_dir: Path = Path("data")
+    auto_cleanup_days: int = 7
 
     @property
     def db_path(self) -> Path:

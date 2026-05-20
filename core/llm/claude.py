@@ -1,35 +1,15 @@
 import base64
 import logging
-import subprocess
-import tempfile
 from pathlib import Path
 
 import anthropic
 
 from core.config import settings
 from core.llm.base import BaseLLM
+from core.llm.openai_proto import _extract_frames
 from core.llm.prompts import get_summary_prompt
 
 logger = logging.getLogger(__name__)
-
-
-def _extract_frames(video_path: Path, max_frames: int = 10, interval: int = 30) -> list[Path]:
-    """Extract key frames from video using ffmpeg. Returns list of JPEG paths."""
-    tmp_dir = Path(tempfile.mkdtemp(prefix="frames_"))
-    fps_filter = f"fps=1/{interval}"
-    cmd = [
-        "ffmpeg", "-i", str(video_path),
-        "-vf", fps_filter,
-        "-frames:v", str(max_frames),
-        "-q:v", "2",
-        str(tmp_dir / "frame_%04d.jpg"),
-        "-y", "-hide_banner", "-loglevel", "error",
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        logger.warning("ffmpeg frame extraction failed: %s", result.stderr)
-        return []
-    return sorted(tmp_dir.glob("frame_*.jpg"))
 
 
 class ClaudeLLM(BaseLLM):
@@ -73,6 +53,7 @@ class ClaudeLLM(BaseLLM):
             video_path,
             max_frames=settings.max_frames,
             interval=settings.frame_interval,
+            output_dir=None,
         )
 
         content: list[dict] = []

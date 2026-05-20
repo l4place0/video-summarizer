@@ -7,6 +7,8 @@ from fastapi.staticfiles import StaticFiles
 
 from core.api.routes import router
 from core.config import settings
+from core.storage.db import Storage
+from core.storage.files import auto_clean_cache
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,6 +20,17 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings.ensure_dirs()
+    logger = logging.getLogger(__name__)
+    # Auto-cleanup: DB tasks (favorites preserved)
+    storage = Storage()
+    deleted_tasks = storage.auto_cleanup()
+    if deleted_tasks:
+        logger.info("Startup auto-cleanup: removed %d expired tasks", deleted_tasks)
+    # Auto-cleanup: video/audio after 1 day, transcripts/frames after 7 days
+    exclude = storage.get_active_and_favorite_task_ids()
+    deleted_files, freed = auto_clean_cache(video_days=1, data_days=7, exclude_tasks=exclude)
+    if deleted_files:
+        logger.info("Startup cache cleanup: removed %d files, freed %.1f MB", deleted_files, freed / 1024 / 1024)
     yield
 
 

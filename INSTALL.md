@@ -1,6 +1,6 @@
 # INSTALL.md — Agent Setup Guide
 
-This document is for AI agents (Claude Code, etc.) to set up the video-summarizer project.
+This document is for AI agents (Claude Code, etc.) to set up the bilibili-learning-helper project.
 
 ## Prerequisites
 
@@ -59,21 +59,21 @@ curl http://localhost:8000/health
 
 ```bash
 # Basic summary
-bash .claude/skills/video-summarizer/scripts/summarize.sh "https://bilibili.com/video/BVxxxxx"
+bash skill/scripts/summarize.sh "https://bilibili.com/video/BVxxxxx"
 
 # With options
-bash .claude/skills/video-summarizer/scripts/summarize.sh "https://bilibili.com/video/BVxxxxx" \
+bash skill/scripts/summarize.sh "https://bilibili.com/video/BVxxxxx" \
   --lang zh --provider openai --detail normal --mode audio
 
 # Multimodal (video frames + transcript)
-bash .claude/skills/video-summarizer/scripts/summarize.sh "https://bilibili.com/video/BVxxxxx" \
+bash skill/scripts/summarize.sh "https://bilibili.com/video/BVxxxxx" \
   --mode multimodal --provider openai
 
 # Check status
-bash .claude/skills/video-summarizer/scripts/status.sh
+bash skill/scripts/status.sh
 
 # Cleanup storage
-bash .claude/skills/video-summarizer/scripts/status.sh --cleanup
+bash skill/scripts/status.sh --cleanup
 ```
 
 ## Web UI

@@ -13,9 +13,75 @@ from core.llm.prompts import get_summary_prompt
 logger = logging.getLogger(__name__)
 
 
-def _extract_frames(video_path: Path, max_frames: int = 10, interval: int = 30) -> list[Path]:
-    """Extract key frames from video using ffmpeg. Returns list of JPEG paths."""
-    tmp_dir = Path(tempfile.mkdtemp(prefix="frames_"))
+def _get_video_duration(video_path: Path) -> float:
+    """Get video duration in seconds using ffprobe."""
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(video_path),
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        return float(result.stdout.strip())
+    except Exception as e:
+        logger.warning("ffprobe failed for %s: %s", video_path.name, e)
+        return 0
+
+
+def _extract_frames(video_path: Path, max_frames: int = 20, interval: int = 30, output_dir: Path | None = None) -> list[Path]:
+    """Extract key frames from video using ffmpeg timestamp seeking.
+
+    Fast even for long videos — seeks directly to each timestamp instead of
+    decoding the entire file.
+    """
+    if output_dir:
+        tmp_dir = output_dir
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        tmp_dir = Path(tempfile.mkdtemp(prefix="frames_"))
+
+    duration = _get_video_duration(video_path)
+    if duration <= 0:
+        logger.warning("Could not determine video duration, falling back to fps filter")
+        return _extract_frames_fps(video_path, max_frames, interval, tmp_dir)
+
+    # Calculate evenly-spaced timestamps
+    step = max(interval, duration / max_frames)
+    timestamps = []
+    t = step / 2  # start at half-step to avoid frame 0
+    while t < duration and len(timestamps) < max_frames:
+        timestamps.append(t)
+        t += step
+
+    logger.info("Extracting %d frames from %.0fs video (step=%.0fs)", len(timestamps), duration, step)
+
+    frames = []
+    for i, ts in enumerate(timestamps):
+        out_path = tmp_dir / f"frame_{i+1:04d}.jpg"
+        cmd = [
+            "ffmpeg", "-ss", f"{ts:.1f}",
+            "-i", str(video_path),
+            "-frames:v", "1",
+            "-q:v", "2",
+            str(out_path),
+            "-y", "-hide_banner", "-loglevel", "error",
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode == 0 and out_path.exists():
+                frames.append(out_path)
+            else:
+                logger.warning("Failed to extract frame at %.1fs: %s", ts, result.stderr[:200])
+        except subprocess.TimeoutExpired:
+            logger.warning("Timeout extracting frame at %.1fs", ts)
+
+    logger.info("Extracted %d/%d frames from %s", len(frames), len(timestamps), video_path.name)
+    return frames
+
+
+def _extract_frames_fps(video_path: Path, max_frames: int, interval: int, tmp_dir: Path) -> list[Path]:
+    """Fallback: extract frames using fps filter (for unknown duration)."""
     fps_filter = f"fps=1/{interval}"
     cmd = [
         "ffmpeg", "-i", str(video_path),
@@ -25,7 +91,7 @@ def _extract_frames(video_path: Path, max_frames: int = 10, interval: int = 30) 
         str(tmp_dir / "frame_%04d.jpg"),
         "-y", "-hide_banner", "-loglevel", "error",
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     if result.returncode != 0:
         logger.warning("ffmpeg frame extraction failed: %s", result.stderr)
         return []
@@ -54,6 +120,23 @@ class OpenAILLM(BaseLLM):
 
         return content or ""
 
+    def _chat_stream(self, prompt: str, max_tokens: int = 4096):
+        """Stream text response from OpenAI API."""
+        try:
+            stream = self.client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+                stream=True,
+            )
+            for chunk in stream:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    yield delta.content
+        except Exception as e:
+            logger.warning("Streaming failed (%s), falling back to non-streaming", e)
+            yield self._chat(prompt, max_tokens)
+
     def _chat_multimodal(self, content: list[dict], max_tokens: int = 4096) -> str:
         model = settings.openai_vision_model or settings.openai_model
         response = self.client.chat.completions.create(
@@ -71,11 +154,12 @@ class OpenAILLM(BaseLLM):
         return summary
 
     def summarize_multimodal(
-        self, transcript: str, video_path: Path, lang: str = "zh", detail: str = "normal", content_type: str | None = None
+        self, transcript: str, video_path: Path, lang: str = "zh", detail: str = "normal",
+        content_type: str | None = None, prefetched_frames: list[Path] | None = None,
     ) -> str:
         # Strategy 1: Extract frames and send as images (primary)
         try:
-            return self._summarize_with_frames(transcript, video_path, lang, content_type)
+            return self._summarize_with_frames(transcript, video_path, lang, content_type, prefetched_frames)
         except Exception as e:
             logger.warning("Frame-based summarization failed: %s, trying native video", e)
 
@@ -115,14 +199,19 @@ class OpenAILLM(BaseLLM):
         logger.info("Native video summary done: %d chars", len(summary))
         return summary
 
-    def _summarize_with_frames(self, transcript: str, video_path: Path, lang: str, content_type: str | None) -> str:
+    def _summarize_with_frames(self, transcript: str, video_path: Path, lang: str, content_type: str | None,
+                                prefetched_frames: list[Path] | None = None) -> str:
         prompt = get_summary_prompt(content_type or "general", lang, multimodal=True).format(transcript=transcript)
 
-        frames = _extract_frames(
-            video_path,
-            max_frames=settings.max_frames,
-            interval=settings.frame_interval,
-        )
+        if prefetched_frames:
+            frames = prefetched_frames
+            logger.info("Using %d prefetched frames", len(frames))
+        else:
+            frames = _extract_frames(
+                video_path,
+                max_frames=settings.max_frames,
+                interval=settings.frame_interval,
+            )
         if not frames:
             raise RuntimeError("No frames extracted")
 

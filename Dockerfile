@@ -1,18 +1,26 @@
 FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
+    ffmpeg curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies (cached layer)
+COPY pyproject.toml .
+RUN uv pip install --system --no-cache .
 
 COPY . .
 
 RUN mkdir -p data/cache/audio data/cache/transcripts
 
+# Pre-download Whisper model (avoids first-run download delay)
+ARG WHISPER_MODEL=medium
+RUN python3 -c "import whisper; whisper.load_model('${WHISPER_MODEL}')"
+
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "core.main:app", "--host", "0.0.0.0", "--port", "8000"]

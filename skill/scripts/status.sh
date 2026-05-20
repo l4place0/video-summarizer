@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/version.sh"
 BASE_URL="${VIDEO_SUMMARIZER_URL:-http://localhost:8000}"
 
 # --- Parse args ---
@@ -10,6 +12,7 @@ TASK_ID=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --task)    MODE="task"; TASK_ID="$2"; shift 2 ;;
+        --retry)   MODE="retry"; TASK_ID="$2"; shift 2 ;;
         --cleanup) MODE="cleanup"; shift ;;
         -*)        echo "Unknown option: $1"; exit 1 ;;
         *)         echo "Unexpected argument: $1"; exit 1 ;;
@@ -49,6 +52,11 @@ transcript = d.get('transcript', '')
 error = d.get('error', '')
 created = d.get('created_at', '')
 completed = d.get('completed_at', '')
+description = meta.get('description', '')
+tags = meta.get('tags', [])
+view_count = meta.get('view_count')
+like_count = meta.get('like_count')
+uploader = meta.get('uploader', '')
 
 m, s = divmod(duration, 60)
 dur_str = f'{m}m {s}s' if m > 0 else f'{s}s'
@@ -56,11 +64,33 @@ dur_str = f'{m}m {s}s' if m > 0 else f'{s}s'
 print(f'Task ID: {d.get(\"task_id\", \"\")}')
 print(f'Status:  {status}')
 print(f'Title:   {title}')
+if uploader:
+    print(f'Uploader: {uploader}')
 print(f'Duration: {dur_str} | Platform: {platform}')
 print(f'Created: {created}')
 if completed:
     print(f'Completed: {completed}')
+
+stats = []
+if view_count is not None:
+    stats.append(f'Views: {view_count:,}')
+if like_count is not None:
+    stats.append(f'Likes: {like_count:,}')
+if stats:
+    print(' | '.join(stats))
 print()
+
+if tags:
+    print(f'Tags: {", ".join(tags[:10])}')
+    print()
+
+if description:
+    desc_preview = description[:300]
+    if len(description) > 300:
+        desc_preview += '...'
+    print('Description:')
+    print(desc_preview)
+    print()
 
 if summary:
     print('Summary:')
@@ -68,13 +98,34 @@ if summary:
     print()
 
 if transcript:
-    print('Transcript:')
-    print(transcript)
+    preview = transcript[:500]
+    if len(transcript) > 500:
+        preview += '...'
+    print('Transcript (first 500 chars):')
+    print(preview)
     print()
 
 if error:
     print(f'Error: {error}')
 "
+    exit 0
+fi
+
+# --- Retry mode ---
+if [ "$MODE" = "retry" ]; then
+    if [ "$SERVICE_UP" != true ]; then
+        echo "Error: Service is not running"
+        exit 1
+    fi
+    echo "Retrying task $TASK_ID..."
+    RESP=$(curl -sf --connect-timeout 3 -X POST "$BASE_URL/api/tasks/$TASK_ID/retry" 2>/dev/null || echo "")
+    if [ -z "$RESP" ]; then
+        echo "Error: Retry failed (task may not be in failed state)"
+        exit 1
+    fi
+    NEW_STATUS=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null || echo "unknown")
+    echo "Task $TASK_ID reset to: $NEW_STATUS"
+    echo "Monitor progress: bash $(dirname "$0")/status.sh --task $TASK_ID"
     exit 0
 fi
 
@@ -108,6 +159,7 @@ fi
 
 # --- Status mode (default) ---
 echo "=== Video Summarizer Status ==="
+echo "Skill version: $CURRENT_VERSION"
 
 if [ "$SERVICE_UP" = true ]; then
     echo "Service: Running (v$VERSION)"

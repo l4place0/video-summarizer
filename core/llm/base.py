@@ -4,10 +4,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from core.llm.prompts import (
-    CLASSIFY_PROMPT,
-    CLASSIFY_PROMPT_MULTIMODAL,
     CONTENT_TYPES,
-    SUMMARY_PROMPTS,
     get_classify_prompt,
     get_summary_prompt,
 )
@@ -20,6 +17,10 @@ class BaseLLM(ABC):
     def _chat(self, prompt: str, max_tokens: int = 4096) -> str:
         """Send a text-only prompt to the LLM and return the response text."""
         ...
+
+    def _chat_stream(self, prompt: str, max_tokens: int = 4096):
+        """Stream text response from LLM. Yields text chunks. Default: falls back to non-streaming."""
+        yield self._chat(prompt, max_tokens)
 
     def _chat_multimodal(self, content: list[dict], max_tokens: int = 4096) -> str:
         """Send a multimodal content array to the LLM. Default: extract text parts only."""
@@ -47,8 +48,10 @@ class BaseLLM(ABC):
                 if content_type not in CONTENT_TYPES:
                     content_type = "general"
                 return {"summary": result.get("summary", ""), "type": content_type}
+            except json.JSONDecodeError as e:
+                logger.warning("Classify attempt %d: invalid JSON response (%s), raw=%s", attempt + 1, e, raw[:200] if raw else "<empty>")
             except Exception as e:
-                logger.warning("Classify attempt %d failed: %s", attempt + 1, e)
+                logger.warning("Classify attempt %d: network/API error: %s", attempt + 1, e)
 
         logger.warning("Classification failed after 3 attempts, using general")
         return {"summary": "", "type": "general"}
@@ -59,8 +62,15 @@ class BaseLLM(ABC):
         prompt = get_summary_prompt(ct, lang, multimodal=False).format(transcript=transcript)
         return self._chat(prompt, max_tokens=4096)
 
+    def summarize_stream(self, transcript: str, lang: str = "zh", detail: str = "normal", content_type: str | None = None):
+        """Stage 2: Stream summarize. Yields text chunks."""
+        ct = content_type or "general"
+        prompt = get_summary_prompt(ct, lang, multimodal=False).format(transcript=transcript)
+        yield from self._chat_stream(prompt, max_tokens=4096)
+
     def summarize_multimodal(
-        self, transcript: str, video_path: Path, lang: str = "zh", detail: str = "normal", content_type: str | None = None
+        self, transcript: str, video_path: Path, lang: str = "zh", detail: str = "normal",
+        content_type: str | None = None, prefetched_frames: list[Path] | None = None,
     ) -> str:
         """Stage 2: Summarize with video + structured prompt. Default: fall back to text-only."""
         return self.summarize(transcript, lang, detail, content_type=content_type)

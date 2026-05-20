@@ -1,104 +1,139 @@
-# Video Summarizer
+# Bilibili Learning Helper
 
-LLM-powered video summarization tool. Downloads video from Bilibili, transcribes audio with Whisper, then uses Claude or OpenAI-compatible LLMs to generate structured summaries.
+[English](README_EN.md) | 中文
 
-## Features
+基于 Whisper ASR + LLM 的 Bilibili/YouTube 视频摘要工具。
 
-- **Two-stage prompt system** — Classifies video content type first, then routes to specialized prompts for structured output
-- **Multimodal support** — Extracts key frames and combines with transcript for visual-aware summaries
-- **Video cache** — Same video ID skips download and transcription on repeat requests
-- **Web UI** — Browser-based interface with task history and real-time status
-- **Skill integration** — Claude Code skill scripts for CLI usage
-- **Multi-language** — Chinese, English, Japanese output
-- **Multi-provider** — Claude and OpenAI-compatible endpoints (tested with MIMO)
+## 功能特性
 
-## Quick Start
+- **视频摘要** — 自动下载、转录、分类、总结视频内容
+- **批量处理** — 支持一次提交多个 URL，批量生成摘要
+- **分享链接解析** — 直接粘贴 Bilibili 分享链接（含标题前缀）即用
+- **多语言** — 支持中文、英文、日文视频
+- **多 LLM** — 支持 OpenAI / Claude
+- **多模态** — 可选帧分析模式，结合画面内容生成更丰富摘要
+- **Markdown 导出** — 一键导出 Obsidian 兼容的 YAML frontmatter 格式
+- **历史管理** — 搜索、筛选、收藏、重试、删除任务
+- **Prompt 定制** — 自定义分类和摘要提示词
+- **Web UI** — 现代化暗色主题界面
 
-See [INSTALL.md](INSTALL.md) for detailed setup.
+## 快速开始
+
+### 环境要求
+
+- Python 3.10+
+- ffmpeg
+- yt-dlp
+
+### 安装
 
 ```bash
-# Install
+# 克隆仓库
+git clone https://github.com/l4place/bilibili-learning-helper.git
+cd bilibili-learning-helper
+
+# 安装依赖
 uv sync
-cp .env.example .env  # edit with your API keys
 
-# Start
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env，填入 API Key
+```
+
+### 启动
+
+```bash
 uv run uvicorn core.main:app --port 8000
-
-# Use
-bash .claude/skills/video-summarizer/scripts/summarize.sh "https://bilibili.com/video/BVxxxxx"
 ```
 
-## Architecture
+打开浏览器访问 `http://localhost:8000`
+
+### 使用 Skill
+
+```bash
+# 单个视频
+bash skill/scripts/summarize.sh "https://bilibili.com/video/BVxxxxx"
+
+# 批量提交
+bash skill/scripts/summarize.sh "url1" "url2" "url3"
+
+# 检查状态
+bash skill/scripts/status.sh
+
+# 检查更新
+bash skill/scripts/check-update.sh
+```
+
+## Docker 部署
+
+```bash
+docker compose up -d
+```
+
+## 技术架构
 
 ```
-URL → Download (yt-dlp) → Audio Extract (ffmpeg) → Transcribe (Whisper)
-                                                          ↓
-                               Classify (LLM Stage 1) ← transcript
-                                    ↓
-                          Route to specialized prompt
-                                    ↓
-                          Summarize (LLM Stage 2) → structured output
+用户输入 URL
+    │
+    ▼
+┌─────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
+│ Download │──▶│  Whisper  │──▶│ Classify │──▶│ Summarize│
+│ (yt-dlp) │   │  (ASR)   │   │  (LLM)   │   │  (LLM)   │
+└─────────┘   └──────────┘   └──────────┘   └──────────┘
+                  │                              │
+                  ▼                              ▼
+            转录文本                        结构化摘要
 ```
 
-### Content Type Routing
+### 内容类型路由
 
-The system first classifies videos into one of 7 types, then applies a tailored prompt:
+系统先将视频分为 7 种类型，然后使用对应的结构化提示词：
 
-| Type | Description | Output Structure |
-|------|-------------|-----------------|
-| tutorial | How-to guides | Steps, prerequisites, pitfalls |
-| tech_talk | Tech speeches | Core argument, evidence, outlook |
-| demo | Product demos | Workflow, input/output, strengths |
-| review | Comparisons | Subjects, criteria, recommendations |
-| news | Current events | Facts, context, perspectives |
-| vlog | Daily content | Scenes, notable points |
-| general | Fallback | Core content, key points, analysis |
+| 类型 | 说明 | 输出结构 |
+|------|------|----------|
+| tutorial | 教程 | 步骤、前置条件、常见问题 |
+| tech_talk | 技术演讲 | 核心论点、证据、展望 |
+| demo | 产品演示 | 工作流、输入输出、优缺点 |
+| review | 评测对比 | 对象、标准、推荐 |
+| news | 新闻 | 事实、背景、观点 |
+| vlog | 日常 | 场景、亮点 |
+| general | 通用 | 核心内容、要点、分析 |
 
 ## API
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Service health check |
-| `/api/summarize` | POST | Submit video for summarization |
-| `/api/tasks` | GET | List all tasks |
-| `/api/tasks/{id}` | GET | Get task detail |
-| `/api/storage` | GET | Storage usage info |
-| `/api/storage` | DELETE | Clear all data |
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/health` | GET | 健康检查 |
+| `/api/summarize` | POST | 提交视频摘要 |
+| `/api/summarize/batch` | POST | 批量提交 |
+| `/api/tasks` | GET | 任务列表 |
+| `/api/tasks/{id}` | GET | 任务详情 |
+| `/api/tasks/{id}/status` | GET | 轻量状态轮询 |
+| `/api/tasks/{id}/stream` | GET | SSE 流式输出 |
+| `/api/storage` | GET | 存储信息 |
+| `/api/storage` | DELETE | 清理数据 |
 
-### Submit Request
+## 配置
 
-```json
-{
-  "url": "https://bilibili.com/video/BVxxxxx",
-  "language": "zh",
-  "llm_provider": "openai",
-  "detail": "normal",
-  "mode": "audio"
-}
-```
+环境变量（`.env`）：
 
-- `mode`: `audio` (text-only) or `multimodal` (frames + transcript)
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `OPENAI_API_KEY` | | OpenAI/MIMO API Key |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | API 端点 |
+| `OPENAI_MODEL` | `gpt-4o` | 文本模型 |
+| `OPENAI_VISION_MODEL` | | 视觉模型（多模态） |
+| `ANTHROPIC_API_KEY` | | Claude API Key |
+| `WHISPER_MODEL` | `base` | Whisper 模型大小 |
+| `MAX_FRAMES` | `10` | 多模态最大帧数 |
 
-## Configuration
-
-Environment variables (`.env`):
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPENAI_API_KEY` | | OpenAI/MIMO API key |
-| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | API endpoint |
-| `OPENAI_MODEL` | `gpt-4o` | Text model |
-| `OPENAI_VISION_MODEL` | | Vision model for multimodal (e.g. `mimo-v2-omni`) |
-| `ANTHROPIC_API_KEY` | | Claude API key |
-| `WHISPER_MODEL` | `base` | Whisper model size |
-| `MAX_FRAMES` | `10` | Max frames for multimodal |
-
-## Tech Stack
+## 技术栈
 
 - Python 3.10+, FastAPI, uv
-- Whisper (ASR), yt-dlp (download), ffmpeg (audio/video processing)
-- Claude / OpenAI-compatible LLMs
+- Whisper (ASR), yt-dlp (下载), ffmpeg (音视频处理)
+- Claude / OpenAI 兼容 LLM
+- SQLite (WAL 模式)
 
-## License
+## 许可证
 
-MIT
+MIT License
