@@ -331,6 +331,36 @@ MULTIMODAL_SUFFIX = {
     "en": "\n\nIn your analysis, incorporate visual content from the video (e.g., whiteboard notes, charts, code interfaces).",
 }
 
+# Review cards suffix — appended to all summary prompts
+REVIEW_CARDS_SUFFIX = {
+    "zh": """
+
+## 复习卡片
+
+根据以上总结内容，生成 5-10 组知识卡片用于复习自测。每组包含一个问题和答案，覆盖视频中最重要的知识点。按以下格式输出：
+
+**Q1:** （问题）
+**A1:** （简明扼要的答案）
+
+**Q2:** （问题）
+**A2:** （答案）
+
+以此类推。""",
+    "en": """
+
+## Review Cards
+
+Based on the summary above, generate 5-10 flashcards for self-testing. Each card should cover an important knowledge point from the video. Use this format:
+
+**Q1:** (question)
+**A1:** (concise answer)
+
+**Q2:** (question)
+**A2:** (answer)
+
+And so on.""",
+}
+
 
 def get_classify_prompt(lang: str = "zh", multimodal: bool = False) -> str:
     # Check custom store first
@@ -342,21 +372,50 @@ def get_classify_prompt(lang: str = "zh", multimodal: bool = False) -> str:
     return prompts.get(lang, prompts["zh"])
 
 
-def get_summary_prompt(content_type: str, lang: str = "zh", multimodal: bool = False) -> str:
+DETAIL_INSTRUCTIONS = {
+    "brief": {
+        "zh": "\n\n【要求】请用 2-3 句话简洁概括核心内容，不要展开细节。",
+        "en": "\n\n[Instruction] Summarize in 2-3 sentences. Be concise, no details.",
+    },
+    "normal": {
+        "zh": "",
+        "en": "",
+    },
+    "detailed": {
+        "zh": "\n\n【要求】请提供详尽分析，包含具体例子、关键数据引用、重要时间点。每个要点尽量展开说明。",
+        "en": "\n\n[Instruction] Provide thorough analysis with specific examples, data references, and key timestamps. Elaborate on each point.",
+    },
+}
+
+
+def get_summary_prompt(content_type: str, lang: str = "zh", multimodal: bool = False, detail: str = "normal") -> str:
     # Check custom store first
     from core.llm.prompt_store import get_prompt_store
     custom = get_prompt_store().get_summary(content_type, lang)
     if custom:
         if multimodal:
             suffix = MULTIMODAL_SUFFIX.get(lang, MULTIMODAL_SUFFIX["zh"])
-            return custom + suffix
+            custom += suffix
+        custom += REVIEW_CARDS_SUFFIX.get(lang, REVIEW_CARDS_SUFFIX["zh"])
         return custom
     type_prompts = SUMMARY_PROMPTS.get(content_type, SUMMARY_PROMPTS["general"])
     prompt = type_prompts.get(lang, type_prompts["zh"])
     if multimodal:
         suffix = MULTIMODAL_SUFFIX.get(lang, MULTIMODAL_SUFFIX["zh"])
         prompt += suffix
+    # Append detail instructions
+    detail_instr = DETAIL_INSTRUCTIONS.get(detail, DETAIL_INSTRUCTIONS["normal"])
+    prompt += detail_instr.get(lang, detail_instr["zh"])
+    # Append review cards suffix
+    prompt += REVIEW_CARDS_SUFFIX.get(lang, REVIEW_CARDS_SUFFIX["zh"])
     return prompt
+
+
+DETAIL_MAX_TOKENS = {
+    "brief": 1024,
+    "normal": 4096,
+    "detailed": 10240,
+}
 
 
 # All known content types for validation

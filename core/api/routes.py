@@ -6,7 +6,7 @@ from pathlib import Path
 _URL_RE = re.compile(r"https?://[^\s]+")
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 
 from core.config import settings
 from core.models import (
@@ -315,6 +315,32 @@ async def get_task_frame(task_id: str, filename: str):
     raise HTTPException(status_code=404, detail="Frame not found")
 
 
+@router.get("/api/tasks/{task_id}/review-doc")
+async def get_review_doc(task_id: str):
+    """Generate and download a self-contained interactive review HTML document."""
+    task = _get_task_or_404(task_id)
+    if task.get("status") != "done":
+        raise HTTPException(status_code=400, detail="Task is not completed yet")
+    if not task.get("summary"):
+        raise HTTPException(status_code=404, detail="Summary not available")
+
+    from core.review_doc import encode_frames, generate_review_doc, parse_review_cards
+
+    cards = parse_review_cards(task["summary"])
+    metadata = task.get("metadata") or {}
+    duration = metadata.get("duration")
+    frames = encode_frames(task_id, duration=duration)
+
+    html = generate_review_doc(task, cards, frames)
+
+    return HTMLResponse(
+        content=html,
+        headers={
+            "Content-Disposition": f'attachment; filename="review_{task_id[:8]}.html"'
+        },
+    )
+
+
 @router.post("/api/tasks/{task_id}/retry", response_model=TaskResponse, status_code=202)
 async def retry_task(task_id: str):
     """Retry a failed task. Resets status and re-runs the pipeline."""
@@ -457,3 +483,40 @@ async def reset_summary_prompt(content_type: str, lang: str = "zh"):
     from core.llm.prompt_store import get_prompt_store
     get_prompt_store().reset(category="summary", content_type=content_type, lang=lang)
     return {"status": "reset", "content_type": content_type, "lang": lang}
+
+
+# ============================================================
+# Cookies management endpoints
+# ============================================================
+
+@router.get("/api/settings/cookies")
+async def get_cookies_status():
+    """Check Bilibili cookies validity."""
+    from core.platforms.bilibili import BilibiliPlatform
+    status = BilibiliPlatform.check_cookies()
+    return {
+        "status": status,
+        "path": str(settings.cookies_path),
+        "exists": settings.cookies_path.is_file(),
+    }
+
+
+@router.put("/api/settings/cookies")
+async def update_cookies(body: dict):
+    """Update Bilibili cookies file. Body: {"cookies": "...Netscape format..."}"""
+    cookies = body.get("cookies", "").strip()
+    if not cookies:
+        raise HTTPException(status_code=400, detail="Cookies content cannot be empty")
+    # Basic Netscape format validation
+    lines = cookies.split("\n")
+    has_domain = any(".bilibili.com" in line for line in lines)
+    if not has_domain:
+        raise HTTPException(status_code=400, detail="Invalid cookies format: missing .bilibili.com domain")
+
+    settings.cookies_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.cookies_path.write_text(cookies, encoding="utf-8")
+
+    # Verify the new cookies
+    from core.platforms.bilibili import BilibiliPlatform
+    status = BilibiliPlatform.check_cookies()
+    return {"status": status, "message": "Cookies updated"}

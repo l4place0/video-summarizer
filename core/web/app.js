@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#delete-task-btn').addEventListener('click', handleDeleteTask);
     $('#favorite-btn').addEventListener('click', handleToggleFavorite);
     $('#export-markdown').addEventListener('click', handleExportMarkdown);
+    $('#export-review-doc').addEventListener('click', handleExportReviewDoc);
     $('#retry-task-btn').addEventListener('click', handleRetryTask);
     $('#result-description')?.addEventListener('click', function() {
         this.classList.toggle('expanded');
@@ -52,6 +53,9 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#history-search').addEventListener('input', applyHistoryFilters);
     $('#filter-platform').addEventListener('change', applyHistoryFilters);
     $('#filter-status').addEventListener('change', applyHistoryFilters);
+    // Cookies management
+    $('#cookies-check').addEventListener('click', loadCookiesStatus);
+    $('#cookies-save').addEventListener('click', handleSaveCookies);
 });
 
 // --- Navbar ---
@@ -70,6 +74,9 @@ function initNavbar() {
             if (page === 'history') {
                 loadHistory();
                 loadStorage();
+            }
+            if (page === 'settings') {
+                onSettingsPageLoad();
             }
         });
     });
@@ -306,6 +313,7 @@ function showBatchSection() {
     $('#result-frames').classList.add('hidden');
     $('#delete-task-btn').classList.add('hidden');
     $('#export-markdown').classList.add('hidden');
+    $('#export-review-doc').classList.add('hidden');
     $('#retry-task-btn').classList.add('hidden');
     $('#favorite-btn').classList.add('hidden');
 
@@ -412,6 +420,7 @@ function showResultSection() {
     $('#result-frames').classList.add('hidden');
     $('#delete-task-btn').classList.add('hidden');
     $('#export-markdown').classList.add('hidden');
+    $('#export-review-doc').classList.add('hidden');
     $('#retry-task-btn').classList.add('hidden');
     $('#favorite-btn').classList.remove('hidden');
 }
@@ -511,6 +520,14 @@ function updateResult(task) {
         if (task.summary) {
             $('#export-markdown').classList.remove('hidden');
         }
+
+        // Review Doc button
+        if (task.summary) {
+            $('#export-review-doc').classList.remove('hidden');
+        }
+
+        // Metrics
+        renderMetrics(meta.metrics);
 
     } else if (task.status === 'failed') {
         $('#result-content').classList.add('hidden');
@@ -997,6 +1014,28 @@ async function handleExportMarkdown() {
     }
 }
 
+async function handleExportReviewDoc() {
+    if (!currentTaskId) return;
+    try {
+        showToast('Generating review document...', 'info');
+        const resp = await fetch(`${API}/tasks/${currentTaskId}/review-doc`);
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({ detail: 'Unknown error' }));
+            throw new Error(err.detail || 'Failed to generate');
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `review_${currentTaskId.slice(0, 8)}.html`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Review document downloaded', 'success');
+    } catch (err) {
+        showToast('Export failed: ' + err.message, 'error');
+    }
+}
+
 // --- Prompt Management ---
 document.addEventListener('DOMContentLoaded', () => {
     // Tabs
@@ -1121,4 +1160,105 @@ function showPromptStatus(section, msg, type) {
     el.textContent = msg;
     el.className = `prompt-status ${type}`;
     setTimeout(() => { el.textContent = ''; el.className = 'prompt-status'; }, 3000);
+}
+
+// --- Cookies Management ---
+async function loadCookiesStatus() {
+    try {
+        const resp = await fetch(`${API}/settings/cookies`);
+        if (!resp.ok) throw new Error('Failed to check');
+        const data = await resp.json();
+        const el = $('#cookies-status');
+        const labels = { valid: 'Valid', expired: 'EXPIRED', not_configured: 'Not Configured' };
+        el.textContent = labels[data.status] || data.status;
+        el.className = `status-badge status-${data.status === 'valid' ? 'done' : data.status === 'expired' ? 'failed' : 'pending'}`;
+    } catch (err) {
+        $('#cookies-status').textContent = 'Error';
+        $('#cookies-status').className = 'status-badge status-failed';
+    }
+}
+
+async function handleSaveCookies() {
+    const cookies = $('#cookies-input').value.trim();
+    if (!cookies) {
+        showToast('Please paste cookies content', 'error');
+        return;
+    }
+    try {
+        const resp = await fetch(`${API}/settings/cookies`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cookies }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Failed to save');
+        showToast(`Cookies updated: ${data.status}`, data.status === 'valid' ? 'success' : 'error');
+        loadCookiesStatus();
+        $('#cookies-input').value = '';
+    } catch (err) {
+        showToast('Save failed: ' + err.message, 'error');
+    }
+}
+
+// Auto-load cookies status when switching to settings page
+function onSettingsPageLoad() {
+    loadCookiesStatus();
+}
+
+// --- Metrics Display ---
+function renderMetrics(metrics) {
+    const el = $('#result-metrics');
+    if (!metrics || Object.keys(metrics).length === 0) {
+        el.classList.add('hidden');
+        return;
+    }
+
+    const stages = ['download', 'transcribe', 'extract_frames', 'classify', 'summarize'];
+    const labels = {
+        download: 'Download',
+        transcribe: 'Transcribe',
+        extract_frames: 'Extract Frames',
+        classify: 'Classify',
+        summarize: 'Summarize',
+    };
+    const totalMs = metrics.total_duration_ms || 0;
+    const maxMs = Math.max(...stages.map(s => (metrics[s] || {}).duration_ms || 0), 1);
+
+    let html = '<div class="metrics-container">';
+    html += '<div class="metrics-header"><strong>Pipeline Metrics</strong>';
+    if (totalMs > 0) {
+        html += ` <span class="metrics-total">Total: ${formatMs(totalMs)}</span>`;
+    }
+    html += '</div>';
+
+    for (const stage of stages) {
+        const data = metrics[stage];
+        if (!data || !data.duration_ms) continue;
+        const pct = Math.round((data.duration_ms / maxMs) * 100);
+        const extras = [];
+        if (data.file_size_bytes) extras.push(formatBytes(data.file_size_bytes));
+        if (data.text_length) extras.push(`${(data.text_length / 1000).toFixed(1)}k chars`);
+        if (data.frame_count) extras.push(`${data.frame_count} frames`);
+        if (data.api_calls) extras.push(`${data.api_calls} API call(s)`);
+        if (data.cached) extras.push('cached');
+
+        html += `<div class="metrics-row">
+            <span class="metrics-label">${labels[stage] || stage}</span>
+            <div class="metrics-bar"><div class="metrics-fill" style="width:${pct}%"></div></div>
+            <span class="metrics-value">${formatMs(data.duration_ms)}</span>
+            ${extras.length ? `<span class="metrics-extras">${extras.join(', ')}</span>` : ''}
+        </div>`;
+    }
+
+    html += '</div>';
+    el.innerHTML = html;
+    el.classList.remove('hidden');
+}
+
+function formatMs(ms) {
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    const m = Math.floor(ms / 60000);
+    const s = Math.round((ms % 60000) / 1000);
+    return `${m}m ${s}s`;
 }

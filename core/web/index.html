@@ -14,6 +14,7 @@
                 <a href="#" class="nav-link active" data-page="submit">Submit</a>
                 <a href="#" class="nav-link" data-page="history">History</a>
                 <a href="#" class="nav-link" data-page="prompts">Prompts</a>
+                <a href="#" class="nav-link" data-page="settings">Settings</a>
             </nav>
             <div id="header-info">
                 <span id="storage-info"></span>
@@ -60,6 +61,7 @@
                     <div id="result-summary"></div>
                     <div id="result-actions">
                         <button id="export-markdown" class="ghost-btn hidden">Export Markdown</button>
+                        <button id="export-review-doc" class="ghost-btn hidden">Generate Review Doc</button>
                         <button id="retry-task-btn" class="ghost-btn hidden">Retry</button>
                         <button id="toggle-transcript" class="hidden">Show Transcript</button>
                         <button id="show-frames" class="hidden">View Frames</button>
@@ -67,6 +69,7 @@
                     </div>
                     <pre id="result-transcript" class="hidden"></pre>
                     <div id="result-frames" class="hidden"></div>
+                    <div id="result-metrics" class="hidden"></div>
                 </div>
                 <div id="result-error" class="hidden"></div>
             </section>
@@ -165,6 +168,26 @@
                     <textarea id="summary-prompt" class="prompt-textarea" placeholder="Enter custom summary prompt... (leave empty to use default)"></textarea>
                     <button id="summary-save" class="small-btn">Save</button>
                     <span id="summary-status" class="prompt-status"></span>
+                </div>
+            </section>
+        </div>
+
+        <!-- ==================== Settings Page ==================== -->
+        <div id="page-settings" class="page">
+            <section id="cookies-section">
+                <div class="section-header">
+                    <h2>Bilibili Cookies</h2>
+                    <span class="hint-text">Cookies are required for accessing restricted Bilibili videos.</span>
+                </div>
+                <div id="cookies-status-row">
+                    <span>Status:</span>
+                    <span id="cookies-status" class="status-badge">Checking...</span>
+                    <button id="cookies-check" class="ghost-btn small-btn">Refresh</button>
+                </div>
+                <textarea id="cookies-input" class="prompt-textarea" placeholder="Paste Bilibili cookies here (Netscape format)..." rows="8"></textarea>
+                <div class="prompt-row">
+                    <button id="cookies-save" class="small-btn">Save Cookies</button>
+                    <span id="cookies-save-status" class="prompt-status"></span>
                 </div>
             </section>
         </div>
