@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -33,6 +34,9 @@ ALLOWED_COLUMNS = frozenset({
     "metadata", "error", "created_at", "completed_at",
     "favorite", "progress",
 })
+
+
+_write_lock = threading.Lock()
 
 
 class Storage:
@@ -79,11 +83,12 @@ class Storage:
     def create_task(self, url: str, platform: str) -> str:
         task_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
-        self._conn.execute(
-            "INSERT INTO tasks (task_id, url, platform, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
-            (task_id, url, platform, now),
-        )
-        self._conn.commit()
+        with _write_lock:
+            self._conn.execute(
+                "INSERT INTO tasks (task_id, url, platform, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
+                (task_id, url, platform, now),
+            )
+            self._conn.commit()
         return task_id
 
     def update_task(self, task_id: str, **fields) -> None:
@@ -104,8 +109,9 @@ class Storage:
         sets = ", ".join(f"{k} = ?" for k in fields)
         vals = list(fields.values())
         vals.append(task_id)
-        self._conn.execute(f"UPDATE tasks SET {sets} WHERE task_id = ?", vals)
-        self._conn.commit()
+        with _write_lock:
+            self._conn.execute(f"UPDATE tasks SET {sets} WHERE task_id = ?", vals)
+            self._conn.commit()
 
     def get_task(self, task_id: str) -> dict | None:
         row = self._conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
@@ -143,39 +149,43 @@ class Storage:
 
     def delete_task(self, task_id: str) -> bool:
         """Delete a single task by ID. Returns True if deleted."""
-        cur = self._conn.execute("DELETE FROM tasks WHERE task_id = ?", (task_id,))
-        self._conn.commit()
+        with _write_lock:
+            cur = self._conn.execute("DELETE FROM tasks WHERE task_id = ?", (task_id,))
+            self._conn.commit()
         return cur.rowcount > 0
 
     def delete_tasks(self, older_than_days: int | None = None, exclude_favorites: bool = False) -> int:
-        if older_than_days is not None:
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=older_than_days)).isoformat()
-            if exclude_favorites:
-                cur = self._conn.execute("DELETE FROM tasks WHERE created_at < ? AND favorite = 0", (cutoff,))
+        with _write_lock:
+            if older_than_days is not None:
+                cutoff = (datetime.now(timezone.utc) - timedelta(days=older_than_days)).isoformat()
+                if exclude_favorites:
+                    cur = self._conn.execute("DELETE FROM tasks WHERE created_at < ? AND favorite = 0", (cutoff,))
+                else:
+                    cur = self._conn.execute("DELETE FROM tasks WHERE created_at < ?", (cutoff,))
             else:
-                cur = self._conn.execute("DELETE FROM tasks WHERE created_at < ?", (cutoff,))
-        else:
-            if exclude_favorites:
-                cur = self._conn.execute("DELETE FROM tasks WHERE favorite = 0")
-            else:
-                cur = self._conn.execute("DELETE FROM tasks")
-        self._conn.commit()
+                if exclude_favorites:
+                    cur = self._conn.execute("DELETE FROM tasks WHERE favorite = 0")
+                else:
+                    cur = self._conn.execute("DELETE FROM tasks")
+            self._conn.commit()
         return cur.rowcount
 
     def set_favorite(self, task_id: str, favorite: bool) -> bool:
         """Set or unset favorite for a task. Returns True if updated."""
-        cur = self._conn.execute("UPDATE tasks SET favorite = ? WHERE task_id = ?", (1 if favorite else 0, task_id))
-        self._conn.commit()
+        with _write_lock:
+            cur = self._conn.execute("UPDATE tasks SET favorite = ? WHERE task_id = ?", (1 if favorite else 0, task_id))
+            self._conn.commit()
         return cur.rowcount > 0
 
     def reset_task(self, task_id: str) -> bool:
         """Reset a failed task for retry. Clears summary/transcript/error/completed_at, sets status to pending."""
-        cur = self._conn.execute(
-            "UPDATE tasks SET status = 'pending', summary = NULL, transcript = NULL, "
-            "error = NULL, completed_at = NULL WHERE task_id = ?",
-            (task_id,),
-        )
-        self._conn.commit()
+        with _write_lock:
+            cur = self._conn.execute(
+                "UPDATE tasks SET status = 'pending', summary = NULL, transcript = NULL, "
+                "error = NULL, completed_at = NULL WHERE task_id = ?",
+                (task_id,),
+            )
+            self._conn.commit()
         return cur.rowcount > 0
 
     def get_active_and_favorite_task_ids(self) -> set[str]:
@@ -191,9 +201,10 @@ class Storage:
         if days is None:
             days = settings.auto_cleanup_days
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-        cur = self._conn.execute("DELETE FROM tasks WHERE created_at < ? AND favorite = 0", (cutoff,))
-        self._conn.commit()
-        deleted = cur.rowcount
+        with _write_lock:
+            cur = self._conn.execute("DELETE FROM tasks WHERE created_at < ? AND favorite = 0", (cutoff,))
+            self._conn.commit()
+            deleted = cur.rowcount
         if deleted:
             logging.getLogger(__name__).info("Auto-cleanup: deleted %d tasks older than %d days", deleted, days)
         return deleted
@@ -219,3 +230,17 @@ class Storage:
             d["metadata"] = json.loads(d["metadata"])
         d["favorite"] = bool(d.get("favorite", 0))
         return d
+
+
+# Singleton — all callers share one Storage instance (and one connection)
+_instance: Storage | None = None
+_init_lock = threading.Lock()
+
+
+def get_storage() -> Storage:
+    global _instance
+    if _instance is None:
+        with _init_lock:
+            if _instance is None:
+                _instance = Storage()
+    return _instance

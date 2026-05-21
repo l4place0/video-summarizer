@@ -1,5 +1,6 @@
 import logging
 import shutil
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -8,11 +9,11 @@ from pathlib import Path
 from core.asr.whisper import transcribe
 from core.config import settings
 from core.llm import get_llm
-from core.llm.openai_proto import _extract_frames
+from core.vision.frames import extract_frames
 from core.platforms.base import BasePlatform
 from core.platforms.bilibili import BilibiliPlatform
 from core.platforms.youtube import YouTubePlatform
-from core.storage.db import Storage
+from core.storage.db import Storage, get_storage
 
 logger = logging.getLogger(__name__)
 
@@ -42,23 +43,25 @@ class MetricsTracker:
 
 # Streaming buffers: task_id -> list of text chunks
 _stream_buffers: dict[str, list[str]] = {}
+_stream_lock = threading.Lock()
 
 
 def get_stream_chunks(task_id: str) -> list[str]:
-    """Return accumulated chunks for a task (used by SSE endpoint)."""
-    return _stream_buffers.get(task_id, [])
+    """Return accumulated chunks for a task (used by SSE endpoint). Returns a copy."""
+    with _stream_lock:
+        return list(_stream_buffers.get(task_id, []))
 
 
 def _stream_callback(task_id: str, chunk: str):
     """Called by LLM for each streaming chunk."""
-    if task_id not in _stream_buffers:
-        _stream_buffers[task_id] = []
-    _stream_buffers[task_id].append(chunk)
+    with _stream_lock:
+        _stream_buffers.setdefault(task_id, []).append(chunk)
 
 
 def _cleanup_stream(task_id: str):
     """Remove stream buffer after task completes."""
-    _stream_buffers.pop(task_id, None)
+    with _stream_lock:
+        _stream_buffers.pop(task_id, None)
 
 
 def _build_metadata_context(metadata: dict, lang: str = "zh") -> str:
@@ -118,7 +121,7 @@ def _try_cache(db: Storage, url: str, task_id: str) -> tuple[str, dict] | None:
 
 def run_pipeline(task_id: str, url: str, language: str, llm_provider: str, detail: str, mode: str = "multimodal") -> None:
     """Run the full pipeline for a task. Called in background."""
-    db = Storage()
+    db = get_storage()
     tracker = MetricsTracker()
     video_path: Path | None = None
     try:
@@ -171,7 +174,7 @@ def run_pipeline(task_id: str, url: str, language: str, llm_provider: str, detai
                 with ThreadPoolExecutor(max_workers=2) as pool:
                     transcribe_future = pool.submit(transcribe, audio_path, language)
                     frames_future = pool.submit(
-                        _extract_frames, video_path, settings.max_frames, settings.frame_interval, frames_output_dir
+                        extract_frames, video_path, frames_output_dir, settings.max_frames, "timestamp", settings.frame_interval
                     )
                     transcript = transcribe_future.result()
                     prefetched_frames = frames_future.result()

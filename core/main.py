@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from core.api.routes import router
 from core.config import settings
-from core.storage.db import Storage
+from core.storage.db import get_storage
 from core.storage.files import auto_clean_cache
 
 logging.basicConfig(
@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     settings.ensure_dirs()
     logger = logging.getLogger(__name__)
     # Auto-cleanup: DB tasks (favorites preserved)
-    storage = Storage()
+    storage = get_storage()
     deleted_tasks = storage.auto_cleanup()
     if deleted_tasks:
         logger.info("Startup auto-cleanup: removed %d expired tasks", deleted_tasks)

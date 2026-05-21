@@ -25,12 +25,12 @@ from core.models import (
     TaskStatus,
 )
 from core.pipeline import get_platform, run_pipeline
-from core.storage.db import Storage
+from core.storage.db import get_storage
 from core.storage.files import cache_size, clean_all, clean_cache
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-db = Storage()
+db = get_storage()
 
 
 def _extract_url(text: str) -> str:

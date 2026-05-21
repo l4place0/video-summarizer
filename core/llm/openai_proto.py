@@ -1,7 +1,5 @@
 import base64
 import logging
-import subprocess
-import tempfile
 from pathlib import Path
 
 from openai import OpenAI
@@ -9,93 +7,9 @@ from openai import OpenAI
 from core.config import settings
 from core.llm.base import BaseLLM
 from core.llm.prompts import get_summary_prompt
+from core.vision.frames import extract_frames
 
 logger = logging.getLogger(__name__)
-
-
-def _get_video_duration(video_path: Path) -> float:
-    """Get video duration in seconds using ffprobe."""
-    cmd = [
-        "ffprobe", "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
-        str(video_path),
-    ]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        return float(result.stdout.strip())
-    except Exception as e:
-        logger.warning("ffprobe failed for %s: %s", video_path.name, e)
-        return 0
-
-
-def _extract_frames(video_path: Path, max_frames: int = 20, interval: int = 30, output_dir: Path | None = None) -> list[Path]:
-    """Extract key frames from video using ffmpeg timestamp seeking.
-
-    Fast even for long videos — seeks directly to each timestamp instead of
-    decoding the entire file.
-    """
-    if output_dir:
-        tmp_dir = output_dir
-        tmp_dir.mkdir(parents=True, exist_ok=True)
-    else:
-        tmp_dir = Path(tempfile.mkdtemp(prefix="frames_"))
-
-    duration = _get_video_duration(video_path)
-    if duration <= 0:
-        logger.warning("Could not determine video duration, falling back to fps filter")
-        return _extract_frames_fps(video_path, max_frames, interval, tmp_dir)
-
-    # Calculate evenly-spaced timestamps
-    step = max(interval, duration / max_frames)
-    timestamps = []
-    t = step / 2  # start at half-step to avoid frame 0
-    while t < duration and len(timestamps) < max_frames:
-        timestamps.append(t)
-        t += step
-
-    logger.info("Extracting %d frames from %.0fs video (step=%.0fs)", len(timestamps), duration, step)
-
-    frames = []
-    for i, ts in enumerate(timestamps):
-        out_path = tmp_dir / f"frame_{i+1:04d}.jpg"
-        cmd = [
-            "ffmpeg", "-ss", f"{ts:.1f}",
-            "-i", str(video_path),
-            "-frames:v", "1",
-            "-q:v", "2",
-            str(out_path),
-            "-y", "-hide_banner", "-loglevel", "error",
-        ]
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            if result.returncode == 0 and out_path.exists():
-                frames.append(out_path)
-            else:
-                logger.warning("Failed to extract frame at %.1fs: %s", ts, result.stderr[:200])
-        except subprocess.TimeoutExpired:
-            logger.warning("Timeout extracting frame at %.1fs", ts)
-
-    logger.info("Extracted %d/%d frames from %s", len(frames), len(timestamps), video_path.name)
-    return frames
-
-
-def _extract_frames_fps(video_path: Path, max_frames: int, interval: int, tmp_dir: Path) -> list[Path]:
-    """Fallback: extract frames using fps filter (for unknown duration)."""
-    fps_filter = f"fps=1/{interval}"
-    cmd = [
-        "ffmpeg", "-i", str(video_path),
-        "-vf", fps_filter,
-        "-frames:v", str(max_frames),
-        "-q:v", "2",
-        str(tmp_dir / "frame_%04d.jpg"),
-        "-y", "-hide_banner", "-loglevel", "error",
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-    if result.returncode != 0:
-        logger.warning("ffmpeg frame extraction failed: %s", result.stderr)
-        return []
-    return sorted(tmp_dir.glob("frame_*.jpg"))
 
 
 class OpenAILLM(BaseLLM):
@@ -147,9 +61,11 @@ class OpenAILLM(BaseLLM):
         return response.choices[0].message.content
 
     def summarize(self, transcript: str, lang: str = "zh", detail: str = "normal", content_type: str | None = None) -> str:
-        prompt = get_summary_prompt(content_type or "general", lang, multimodal=False).format(transcript=transcript)
-        logger.info("Summarizing with OpenAI (%s, type=%s)", settings.openai_model, content_type)
-        summary = self._chat(prompt, max_tokens=4096)
+        from core.llm.prompts import DETAIL_MAX_TOKENS
+        prompt = get_summary_prompt(content_type or "general", lang, multimodal=False, detail=detail).format(transcript=transcript)
+        max_tokens = DETAIL_MAX_TOKENS.get(detail, 4096)
+        logger.info("Summarizing with OpenAI (%s, type=%s, detail=%s)", settings.openai_model, content_type, detail)
+        summary = self._chat(prompt, max_tokens=max_tokens)
         logger.info("Summary done: %d chars", len(summary))
         return summary
 
@@ -207,7 +123,7 @@ class OpenAILLM(BaseLLM):
             frames = prefetched_frames
             logger.info("Using %d prefetched frames", len(frames))
         else:
-            frames = _extract_frames(
+            frames = extract_frames(
                 video_path,
                 max_frames=settings.max_frames,
                 interval=settings.frame_interval,

@@ -6,7 +6,7 @@ import anthropic
 
 from core.config import settings
 from core.llm.base import BaseLLM
-from core.llm.openai_proto import _extract_frames
+from core.vision.frames import extract_frames
 from core.llm.prompts import get_summary_prompt
 
 logger = logging.getLogger(__name__)
@@ -49,11 +49,10 @@ class ClaudeLLM(BaseLLM):
     ) -> str:
         prompt = get_summary_prompt(content_type or "general", lang, multimodal=True).format(transcript=transcript)
 
-        frames = _extract_frames(
+        frames = extract_frames(
             video_path,
             max_frames=settings.max_frames,
             interval=settings.frame_interval,
-            output_dir=None,
         )
 
         content: list[dict] = []
