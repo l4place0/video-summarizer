@@ -388,6 +388,13 @@ DETAIL_INSTRUCTIONS = {
 }
 
 
+def _get_review_cards_suffix(lang: str = "zh") -> str:
+    """Get review cards suffix — custom from store or built-in default."""
+    from core.llm.prompt_store import get_prompt_store
+    custom = get_prompt_store().get_review_cards_suffix(lang)
+    return custom or REVIEW_CARDS_SUFFIX.get(lang, REVIEW_CARDS_SUFFIX["zh"])
+
+
 def get_summary_prompt(content_type: str, lang: str = "zh", multimodal: bool = False, detail: str = "normal") -> str:
     # Check custom store first
     from core.llm.prompt_store import get_prompt_store
@@ -396,7 +403,7 @@ def get_summary_prompt(content_type: str, lang: str = "zh", multimodal: bool = F
         if multimodal:
             suffix = MULTIMODAL_SUFFIX.get(lang, MULTIMODAL_SUFFIX["zh"])
             custom += suffix
-        custom += REVIEW_CARDS_SUFFIX.get(lang, REVIEW_CARDS_SUFFIX["zh"])
+        custom += _get_review_cards_suffix(lang)
         return custom
     type_prompts = SUMMARY_PROMPTS.get(content_type, SUMMARY_PROMPTS["general"])
     prompt = type_prompts.get(lang, type_prompts["zh"])
@@ -407,7 +414,7 @@ def get_summary_prompt(content_type: str, lang: str = "zh", multimodal: bool = F
     detail_instr = DETAIL_INSTRUCTIONS.get(detail, DETAIL_INSTRUCTIONS["normal"])
     prompt += detail_instr.get(lang, detail_instr["zh"])
     # Append review cards suffix
-    prompt += REVIEW_CARDS_SUFFIX.get(lang, REVIEW_CARDS_SUFFIX["zh"])
+    prompt += _get_review_cards_suffix(lang)
     return prompt
 
 

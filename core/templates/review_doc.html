@@ -496,30 +496,28 @@ function renderTimeline() {
     </div>`;
   }).join('');
 
-  // Frame click → highlight transcript segment
+  // Frame click → open lightbox
   tl.querySelectorAll('.tl-frame').forEach(img => {
     img.addEventListener('click', () => {
-      const segIdx = parseInt(img.closest('.timeline-item').dataset.segIdx);
-      // Switch to transcript tab
+      openLightbox(parseInt(img.dataset.frameIdx));
+    });
+  });
+
+  // Timeline text click → jump to transcript segment
+  tl.querySelectorAll('.tl-text').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', () => {
+      const segIdx = parseInt(el.closest('.timeline-item').dataset.segIdx);
       $$('.nav-tab').forEach(t => t.classList.remove('active'));
       $$('.panel').forEach(p => p.classList.remove('active'));
       $$('.nav-tab').forEach(t => { if (t.dataset.tab === 'transcript') t.classList.add('active'); });
       $('#panel-transcript').classList.add('active');
-      // Highlight segment
       const segEl = document.querySelector(`.transcript-seg[data-idx="${segIdx}"]`);
       if (segEl) {
         segEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
         segEl.classList.add('highlight');
         setTimeout(() => segEl.classList.remove('highlight'), 3000);
       }
-    });
-  });
-
-  // Frame click for lightbox
-  tl.querySelectorAll('.tl-frame').forEach(img => {
-    img.addEventListener('dblclick', e => {
-      e.stopPropagation();
-      openLightbox(parseInt(img.dataset.frameIdx));
     });
   });
 }

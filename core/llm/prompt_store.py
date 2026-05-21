@@ -9,7 +9,8 @@ the built-in defaults. The JSON structure mirrors the in-memory dicts:
         "tutorial": {"zh": "...", "en": "..."},
         "tech_talk": {"zh": "...", "en": "..."},
         ...
-    }
+    },
+    "review_cards_suffix": {"zh": "...", "en": "..."}
 }
 """
 
@@ -57,6 +58,13 @@ class PromptStore:
     def get_summary(self, content_type: str, lang: str = "zh") -> str | None:
         return self._data.get("summary", {}).get(content_type, {}).get(lang)
 
+    def get_review_cards_suffix(self, lang: str = "zh") -> str | None:
+        return self._data.get("review_cards_suffix", {}).get(lang)
+
+    def set_review_cards_suffix(self, lang: str, suffix: str) -> None:
+        self._data.setdefault("review_cards_suffix", {})[lang] = suffix
+        self._save()
+
     def set_summary(self, content_type: str, lang: str, prompt: str) -> None:
         self._data.setdefault("summary", {}).setdefault(content_type, {})[lang] = prompt
         self._save()
@@ -73,6 +81,9 @@ class PromptStore:
             result["summary"] = {}
             for ct, langs in summary.items():
                 result["summary"][ct] = {lang: len(p) for lang, p in langs.items()}
+        rc = self._data.get("review_cards_suffix", {})
+        if rc:
+            result["review_cards_suffix"] = {lang: len(p) for lang, p in rc.items()}
         return result
 
     def reset(self, category: str | None = None, content_type: str | None = None, lang: str | None = None) -> bool:
@@ -105,6 +116,14 @@ class PromptStore:
                 self._data.get("summary", {}).pop(content_type, None)
             else:
                 self._data.pop("summary", None)
+            self._save()
+            return True
+
+        if category == "review_cards_suffix":
+            if lang:
+                self._data.get("review_cards_suffix", {}).pop(lang, None)
+            else:
+                self._data.pop("review_cards_suffix", None)
             self._save()
             return True
 
