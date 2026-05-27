@@ -163,6 +163,18 @@ echo "Skill version: $CURRENT_VERSION"
 
 if [ "$SERVICE_UP" = true ]; then
     echo "Service: Running (v$VERSION)"
+
+    # Cookies status
+    COOKIES=$(curl -sf --connect-timeout 3 "$BASE_URL/api/settings/cookies" 2>/dev/null || echo "")
+    if [ -n "$COOKIES" ]; then
+        COOKIES_STATUS=$(echo "$COOKIES" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null || echo "unknown")
+        case "$COOKIES_STATUS" in
+            valid)         echo "Cookies: Valid" ;;
+            expired)       echo "Cookies: EXPIRED (update recommended)" ;;
+            not_configured) echo "Cookies: Not configured" ;;
+            *)             echo "Cookies: Unknown" ;;
+        esac
+    fi
 else
     echo "Service: Not running"
     echo ""

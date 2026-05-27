@@ -119,8 +119,8 @@ class YtdlpPlatform(BasePlatform):
         logger.info("Downloading video stream: %s", video_id)
         try:
             vid_info = self._retry_download(url, vid_opts)
-            vid_file = Path(vid_info.get("_filename", ""))
-            if not vid_file.exists():
+            vid_file = Path(vid_info.get("_filename") or "")
+            if not vid_file.name or not vid_file.exists():
                 candidates = list(output_dir.glob(f"{video_id}_video.*"))
                 vid_file = candidates[0] if candidates else None
             if vid_file and vid_file.exists():
@@ -135,6 +135,22 @@ class YtdlpPlatform(BasePlatform):
         output_dir.mkdir(parents=True, exist_ok=True)
         audio_path = output_dir / f"{video_id}.wav"
         video_path = output_dir / f"{video_id}.mp4"
+
+        # Skip re-download if audio already exists (e.g. retry after transcription failure)
+        if audio_path.exists() and audio_path.stat().st_size > 0:
+            logger.info("Audio already exists, skipping download: %s", audio_path.name)
+            # Still extract metadata from yt-dlp (without downloading)
+            try:
+                info_opts = self._get_ydl_opts(audio_path)
+                info_opts["skip_download"] = True
+                with yt_dlp.YoutubeDL(info_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                metadata = self._build_metadata(info, video_id)
+            except Exception as e:
+                logger.warning("Failed to extract metadata on retry: %s", e)
+                metadata = {"video_id": video_id, "title": ""}
+            ret_video = video_path if keep_video and video_path.exists() else None
+            return audio_path, metadata, ret_video
 
         ydl_opts = self._get_ydl_opts(video_path)
         logger.info("Downloading audio: %s", video_id)
