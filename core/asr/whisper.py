@@ -92,15 +92,34 @@ def _get_model():
     return _model
 
 
-def _transcribe_once(model, backend: str, audio_path: Path, language: str) -> str:
-    """Single transcription attempt."""
+def _format_timestamp(seconds: float) -> str:
+    """Format seconds as [MM:SS]."""
+    m, s = divmod(int(seconds), 60)
+    return f"[{m:02d}:{s:02d}]"
+
+
+def _transcribe_once(model, backend: str, audio_path: Path, language: str, beam_size: int = 5) -> str:
+    """Single transcription attempt. Returns text with segment timestamps."""
     if backend == "faster":
-        segments, info = model.transcribe(str(audio_path), language=language, beam_size=5)
-        text = " ".join(segment.text for segment in segments).strip()
-        logger.info("Transcription done: %d chars (language: %.2f confidence)", len(text), info.language_probability)
+        segments, info = model.transcribe(str(audio_path), language=language, beam_size=beam_size)
+        lines = []
+        for seg in segments:
+            ts = _format_timestamp(seg.start)
+            lines.append(f"{ts} {seg.text.strip()}")
+        text = "\n".join(lines).strip()
+        logger.info("Transcription done: %d chars, %d segments (language: %.2f confidence, beam_size=%d)",
+                    len(text), len(lines), info.language_probability, beam_size)
     else:
         result = model.transcribe(str(audio_path), language=language, fp16=False)
-        text = result.get("text", "").strip()
+        raw_segments = result.get("segments", [])
+        if raw_segments:
+            lines = []
+            for seg in raw_segments:
+                ts = _format_timestamp(seg.get("start", 0))
+                lines.append(f"{ts} {seg.get('text', '').strip()}")
+            text = "\n".join(lines).strip()
+        else:
+            text = result.get("text", "").strip()
         logger.info("Transcription done: %d chars", len(text))
     return text
 
@@ -118,11 +137,37 @@ def transcribe(audio_path: Path, language: str = "zh") -> str:
     try:
         return _transcribe_once(model, backend, audio_path, language)
     except RuntimeError as e:
-        if "out of memory" in str(e).lower() and _device == "cuda":
+        err_msg = str(e).lower()
+        if "out of memory" in err_msg and _device == "cuda":
             with _lock:
                 logger.warning("CUDA OOM during transcription, falling back to CPU permanently")
                 _device = "cpu"
                 _model = None
                 model = _get_model()
             return _transcribe_once(model, backend, audio_path, language)
+        # Long audio or CUDA memory issue: try openai-whisper on CPU
+        if "reshape" in err_msg or "key.size" in err_msg or "out of memory" in err_msg:
+            logger.warning("Whisper error (%s), trying openai-whisper CPU fallback", e)
+            try:
+                import whisper
+                cpu_model = whisper.load_model(settings.whisper_model, device="cpu")
+                result = cpu_model.transcribe(str(audio_path), language=language, fp16=False)
+                raw_segments = result.get("segments", [])
+                if raw_segments:
+                    lines = []
+                    for seg in raw_segments:
+                        ts = _format_timestamp(seg.get("start", 0))
+                        lines.append(f"{ts} {seg.get('text', '').strip()}")
+                    return "\n".join(lines).strip()
+                return result.get("text", "").strip()
+            except Exception as fallback_e:
+                logger.error("CPU fallback also failed: %s", fallback_e)
+                raise e  # raise original error
         raise
+
+
+class InProcessASR:
+    """Wrapper around the in-process Whisper transcribe function (duck-typed BaseASR)."""
+
+    def transcribe(self, audio_path: Path, language: str = "zh") -> str:
+        return transcribe(audio_path, language)

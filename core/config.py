@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     whisper_backend: str = "faster"  # "faster" or "openai"
     hf_endpoint: str = ""  # HuggingFace mirror endpoint, e.g. https://hf-mirror.com
 
+    # ASR service
+    asr_provider: str = "inprocess"  # inprocess | local | openai
+    asr_endpoint: str = ""           # http://gpu-server:8001 (for local)
+    asr_api_key: str = ""            # API key (for openai cloud)
+    asr_model: str = "whisper-1"     # cloud model name
+
     # Cookies (for Bilibili etc.)
     cookies_path: Path = Path("data/cookies.txt")
 
